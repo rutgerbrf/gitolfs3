@@ -97,8 +97,6 @@ type batchResponse struct {
 	HashAlgo hashAlgo              `json:"hash_algo,omitempty"`
 }
 
-var re = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
-
 type handler struct {
 	mc       *minio.Client
 	bucket   string
@@ -202,18 +200,22 @@ func isLFSMediaType(t string) bool {
 	return false
 }
 
+var re = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqPath := os.Getenv("PATH_INFO")
 	if reqPath == "" {
 		reqPath = r.URL.Path
 	}
+	reqPath = strings.TrimPrefix("/", path.Clean(reqPath))
 	submatches := re.FindStringSubmatch(reqPath)
-	if len(submatches) != 1 {
-		log("Got URL: %s", r.URL.Path)
+	if len(submatches) != 2 {
+		log("Got path: %s, did not match regex", reqPath)
 		makeRespError(w, "Not found", http.StatusNotFound)
 		return
 	}
-	repo := strings.TrimPrefix("/", path.Clean(submatches[0]))
+	repo := strings.TrimPrefix("/", path.Clean(submatches[1]))
+	log("Repository: %s", repo)
 
 	if !slices.ContainsFunc(r.Header.Values("Accept"), isLFSMediaType) {
 		makeRespError(w, "Expected "+lfsMIME+" (with UTF-8 charset) in list of acceptable response media types", http.StatusNotAcceptable)
