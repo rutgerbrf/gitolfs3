@@ -73,7 +73,7 @@ func (d SecondDuration) MarshalJSON() ([]byte, error) {
 }
 
 type batchAction struct {
-	HRef      *url.URL            `json:"href"`
+	HRef      string              `json:"href"`
 	Header    map[string]string   `json:"header,omitempty"`
 	ExpiresIn *SecondDuration     `json:"expires_in,omitempty"`
 	ExpiresAt *RFC3339SecondsTime `json:"expires_at,omitempty"`
@@ -183,7 +183,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 		Authenticated: &authenticated,
 		Actions: map[operation]batchAction{
 			operationDownload: {
-				HRef:      presigned,
+				HRef:      presigned.String(),
 				ExpiresIn: &expiresInSeconds,
 			},
 		},
