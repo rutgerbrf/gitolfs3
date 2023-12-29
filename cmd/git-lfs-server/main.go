@@ -207,7 +207,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if reqPath == "" {
 		reqPath = r.URL.Path
 	}
+	log("reqPath: %s", reqPath)
 	reqPath = strings.TrimPrefix("/", path.Clean(reqPath))
+	log("Cleaned reqPath: %s", reqPath)
 	submatches := re.FindStringSubmatch(reqPath)
 	if len(submatches) != 2 {
 		log("Got path: %s, did not match regex", reqPath)
