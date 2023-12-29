@@ -152,6 +152,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 		}
 		// TODO: consider not making this an object-specific, but rather a
 		// generic error such that the entire Batch API request fails.
+		log("Failed to query object information (full path: %s): %s", fullPath, err)
 		return makeObjError(obj, "Failed to query object information", http.StatusInternalServerError)
 	}
 	if info.ChecksumSHA256 != "" && strings.ToLower(info.ChecksumSHA256) != obj.fullHash {
@@ -165,6 +166,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 	if err != nil {
 		// TODO: consider not making this an object-specific, but rather a
 		// generic error such that the entire Batch API request fails.
+		log("Failed to generate action href (full path: %s): %s", fullPath, err)
 		return makeObjError(obj, "Failed to generate action href", http.StatusInternalServerError)
 	}
 
@@ -260,6 +262,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	permGranted := err == nil
 	var exitErr *exec.ExitError
 	if err != nil && !errors.As(err, &exitErr) {
+		log("Error checking access info (running %s): %s", cmd, err)
 		makeRespError(w, "Failed to query access information", http.StatusInternalServerError)
 		return
 	}
