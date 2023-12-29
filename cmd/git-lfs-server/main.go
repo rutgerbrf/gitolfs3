@@ -203,7 +203,11 @@ func isLFSMediaType(t string) bool {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	submatches := re.FindStringSubmatch(r.URL.Path)
+	reqPath := os.Getenv("PATH_INFO")
+	if reqPath == "" {
+		reqPath = r.URL.Path
+	}
+	submatches := re.FindStringSubmatch(reqPath)
 	if len(submatches) != 1 {
 		log("Got URL: %s", r.URL.Path)
 		makeRespError(w, "Not found", http.StatusNotFound)
