@@ -1,6 +1,6 @@
 module git.fautchen.eu/gitolfs3
 
-go 1.21.5
+go 1.21.4
 
 require github.com/minio/minio-go/v7 v7.0.66
 
