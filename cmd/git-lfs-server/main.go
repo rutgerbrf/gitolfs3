@@ -21,6 +21,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/rs/xid"
 )
 
 type operation string
@@ -123,10 +124,14 @@ type lfsError struct {
 	RequestID        string `json:"request_id,omitempty"`
 }
 
-func makeRespError(w http.ResponseWriter, message string, code int) {
+func makeRespError(ctx context.Context, w http.ResponseWriter, message string, code int) {
+	err := lfsError{Message: message}
+	if val := ctx.Value(requestIDKey); val != nil {
+		err.RequestID = val.(string)
+	}
 	w.Header().Set("Content-Type", lfsMIME+"; charset=utf-8")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(lfsError{Message: message})
+	json.NewEncoder(w).Encode(err)
 }
 
 func makeObjError(obj parsedBatchObject, message string, code int) batchResponseObject {
@@ -153,7 +158,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 		}
 		// TODO: consider not making this an object-specific, but rather a
 		// generic error such that the entire Batch API request fails.
-		log("Failed to query object information (full path: %s): %s", fullPath, err)
+		reqlog(ctx, "Failed to query object information (full path: %s): %s", fullPath, err)
 		return makeObjError(obj, "Failed to query object information", http.StatusInternalServerError)
 	}
 	if info.ChecksumSHA256 != "" && strings.ToLower(info.ChecksumSHA256) != obj.fullHash {
@@ -167,7 +172,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 	if err != nil {
 		// TODO: consider not making this an object-specific, but rather a
 		// generic error such that the entire Batch API request fails.
-		log("Failed to generate action href (full path: %s): %s", fullPath, err)
+		reqlog(ctx, "Failed to generate action href (full path: %s): %s", fullPath, err)
 		return makeObjError(obj, "Failed to generate action href", http.StatusInternalServerError)
 	}
 
@@ -205,52 +210,58 @@ func isLFSMediaType(t string) bool {
 
 var re = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
 
+type requestID struct{}
+
+var requestIDKey requestID
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
+
 	reqPath := os.Getenv("PATH_INFO")
 	if reqPath == "" {
 		reqPath = r.URL.Path
 	}
-	log("reqPath: %s", reqPath)
+	reqlog(ctx, "reqPath: %s", reqPath)
 	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
-	log("Cleaned reqPath: %s", reqPath)
+	reqlog(ctx, "Cleaned reqPath: %s", reqPath)
 	submatches := re.FindStringSubmatch(reqPath)
 	if len(submatches) != 2 {
-		log("Got path: %s, did not match regex", reqPath)
-		makeRespError(w, "Not found", http.StatusNotFound)
+		reqlog(ctx, "Got path: %s, did not match regex", reqPath)
+		makeRespError(ctx, w, "Not found", http.StatusNotFound)
 		return
 	}
 	repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
-	log("Repository: %s", repo)
+	reqlog(ctx, "Repository: %s", repo)
 
 	if !slices.ContainsFunc(r.Header.Values("Accept"), isLFSMediaType) {
-		makeRespError(w, "Expected "+lfsMIME+" (with UTF-8 charset) in list of acceptable response media types", http.StatusNotAcceptable)
+		makeRespError(ctx, w, "Expected "+lfsMIME+" (with UTF-8 charset) in list of acceptable response media types", http.StatusNotAcceptable)
 		return
 	}
 	if !isLFSMediaType(r.Header.Get("Content-Type")) {
-		makeRespError(w, "Expected request Content-Type to be "+lfsMIME+" (with UTF-8 charset)", http.StatusUnsupportedMediaType)
+		makeRespError(ctx, w, "Expected request Content-Type to be "+lfsMIME+" (with UTF-8 charset)", http.StatusUnsupportedMediaType)
 		return
 	}
 
 	var body batchRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		makeRespError(w, "Failed to parse request body as JSON", http.StatusBadRequest)
+		makeRespError(ctx, w, "Failed to parse request body as JSON", http.StatusBadRequest)
 		return
 	}
 
 	if body.HashAlgo != hashAlgoSHA256 {
-		makeRespError(w, "Unsupported hash algorithm specified", http.StatusConflict)
+		makeRespError(ctx, w, "Unsupported hash algorithm specified", http.StatusConflict)
 		return
 	}
 
 	// TODO: handle authentication
 	// right now, we're just trying to make everything publically accessible
 	if body.Operation == operationUpload {
-		makeRespError(w, "Upload operations are currently not supported", http.StatusForbidden)
+		makeRespError(ctx, w, "Upload operations are currently not supported", http.StatusForbidden)
 		return
 	}
 
 	if len(body.Transfers) != 0 && !slices.Contains(body.Transfers, transferAdapterBasic) {
-		makeRespError(w, "Unsupported transfer adapter specified (supported: basic)", http.StatusConflict)
+		makeRespError(ctx, w, "Unsupported transfer adapter specified (supported: basic)", http.StatusConflict)
 		return
 	}
 
@@ -263,15 +274,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	permGranted := err == nil
 	var exitErr *exec.ExitError
 	if err != nil && !errors.As(err, &exitErr) {
-		log("Error checking access info (running %s): %s", cmd, err)
-		makeRespError(w, "Failed to query access information", http.StatusInternalServerError)
+		reqlog(ctx, "Error checking access info (running %s): %s", cmd, err)
+		makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
 		return
 	}
 	if !permGranted {
 		// TODO: when handling authorization, make sure to return 403 Forbidden
 		// here when the user *does* have read permissions, but is not allowed
 		// to write when requesting an upload operation.
-		makeRespError(w, "Repository not found", http.StatusNotFound)
+		makeRespError(ctx, w, "Repository not found", http.StatusNotFound)
 		return
 	}
 
@@ -279,7 +290,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, obj := range body.Objects {
 		oid := strings.ToLower(obj.OID)
 		if !isValidSHA256Hash(oid) {
-			makeRespError(w, "Invalid hash format in object ID", http.StatusBadRequest)
+			makeRespError(ctx, w, "Invalid hash format in object ID", http.StatusBadRequest)
 			return
 		}
 		objects = append(objects, parsedBatchObject{
@@ -295,12 +306,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HashAlgo: hashAlgoSHA256,
 	}
 	for _, obj := range objects {
-		resp.Objects = append(resp.Objects, h.handleDownloadObject(r.Context(), repo, obj))
+		resp.Objects = append(resp.Objects, h.handleDownloadObject(ctx, repo, obj))
 	}
 
 	w.Header().Set("Content-Type", lfsMIME)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
+}
+
+func reqlog(ctx context.Context, msg string, args ...any) {
+	fmt.Fprint(os.Stderr, "[gitolfs3] ")
+	if val := ctx.Value(requestIDKey); val != nil {
+		fmt.Fprintf(os.Stderr, "[%s] ", val.(string))
+	}
+	fmt.Fprintf(os.Stderr, msg, args...)
+	fmt.Fprint(os.Stderr, "\n")
 }
 
 func log(msg string, args ...any) {
