@@ -98,9 +98,10 @@ type batchResponse struct {
 }
 
 type handler struct {
-	mc       *minio.Client
-	bucket   string
-	anonUser string
+	mc           *minio.Client
+	bucket       string
+	anonUser     string
+	gitolitePath string
 }
 
 // Requires lowercase hash
@@ -257,7 +258,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if body.Ref != nil && body.Ref.Name != "" {
 		gitoliteArgs = append(gitoliteArgs, body.Ref.Name)
 	}
-	cmd := exec.Command("gitolite", gitoliteArgs...)
+	cmd := exec.Command(h.gitolitePath, gitoliteArgs...)
 	err := cmd.Run()
 	permGranted := err == nil
 	var exitErr *exec.ExitError
@@ -314,15 +315,20 @@ func die(msg string, args ...any) {
 }
 
 func main() {
+	log("Environment variables:")
+	for _, s := range os.Environ() {
+		log("  %s", s)
+	}
+
 	anonUser := os.Getenv("ANON_USER")
 	endpoint := os.Getenv("S3_ENDPOINT")
 	bucket := os.Getenv("S3_BUCKET")
 	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
 	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
+	gitolitePath := os.Getenv("GITOLITE_PATH")
 
-	log("Environment variables:")
-	for _, s := range os.Environ() {
-		log("  %s", s)
+	if gitolitePath == "" {
+		gitolitePath = "gitolite"
 	}
 
 	if anonUser == "" {
@@ -359,7 +365,7 @@ func main() {
 		die("Fatal: failed to create S3 client: %s", err)
 	}
 
-	if err = cgi.Serve(&handler{mc, bucket, anonUser}); err != nil {
+	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath}); err != nil {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
 }
