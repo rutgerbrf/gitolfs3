@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/http/cgi"
 	"net/url"
@@ -124,7 +125,7 @@ type lfsError struct {
 }
 
 func makeRespError(w http.ResponseWriter, message string, code int) {
-	w.Header().Set("Content-Type", lfsMIME)
+	w.Header().Set("Content-Type", lfsMIME+"; charset=utf-8")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(lfsError{Message: message})
 }
@@ -190,6 +191,17 @@ type parsedBatchObject struct {
 	size       uint64
 }
 
+func isLFSMediaType(t string) bool {
+	if mediaType, params, err := mime.ParseMediaType(t); err == nil {
+		if mediaType == lfsMIME {
+			if params["charset"] == "" || strings.ToLower(params["charset"]) == "utf-8" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	submatches := re.FindStringSubmatch(r.URL.Path)
 	if len(submatches) != 1 {
@@ -198,12 +210,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := strings.TrimPrefix("/", path.Clean(submatches[0]))
 
-	if !slices.Contains(r.Header.Values("Accept"), lfsMIME) {
-		makeRespError(w, "Expected "+lfsMIME+" in list of acceptable response media types", http.StatusNotAcceptable)
+	if !slices.ContainsFunc(r.Header.Values("Accept"), isLFSMediaType) {
+		makeRespError(w, "Expected "+lfsMIME+" (with UTF-8 charset) in list of acceptable response media types", http.StatusNotAcceptable)
 		return
 	}
-	if r.Header.Get("Content-Type") != lfsMIME {
-		makeRespError(w, "Expected request Content-Type to be "+lfsMIME, http.StatusUnsupportedMediaType)
+	if !isLFSMediaType(r.Header.Get("Content-Type")) {
+		makeRespError(w, "Expected request Content-Type to be "+lfsMIME+" (with UTF-8 charset)", http.StatusUnsupportedMediaType)
 		return
 	}
 
