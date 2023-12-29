@@ -146,7 +146,7 @@ func makeObjError(obj parsedBatchObject, message string, code int) batchResponse
 }
 
 func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
-	fullPath := path.Join(repo, "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
+	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
 	expiresIn := time.Hour * 24
 	expiresInSeconds := SecondDuration(expiresIn)
 
