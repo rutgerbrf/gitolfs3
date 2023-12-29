@@ -208,7 +208,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reqPath = r.URL.Path
 	}
 	log("reqPath: %s", reqPath)
-	reqPath = strings.TrimPrefix("/", path.Clean(reqPath))
+	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
 	log("Cleaned reqPath: %s", reqPath)
 	submatches := re.FindStringSubmatch(reqPath)
 	if len(submatches) != 2 {
@@ -216,7 +216,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		makeRespError(w, "Not found", http.StatusNotFound)
 		return
 	}
-	repo := strings.TrimPrefix("/", path.Clean(submatches[1]))
+	repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
 	log("Repository: %s", repo)
 
 	if !slices.ContainsFunc(r.Header.Values("Accept"), isLFSMediaType) {
