@@ -205,6 +205,7 @@ func isLFSMediaType(t string) bool {
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	submatches := re.FindStringSubmatch(r.URL.Path)
 	if len(submatches) != 1 {
+		log("Got URL: %s", r.URL.Path)
 		makeRespError(w, "Not found", http.StatusNotFound)
 		return
 	}
@@ -290,10 +291,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func die(msg string, args ...any) {
-	fmt.Fprint(os.Stderr, "Error: ")
+func log(msg string, args ...any) {
+	fmt.Fprint(os.Stderr, "[gitolfs3] ")
 	fmt.Fprintf(os.Stderr, msg, args...)
 	fmt.Fprint(os.Stderr, "\n")
+}
+
+func die(msg string, args ...any) {
+	log(msg, args...)
 	os.Exit(1)
 }
 
@@ -304,30 +309,35 @@ func main() {
 	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
 	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
 
+	log("Environment variables:")
+	for _, s := range os.Environ() {
+		log("  %s", s)
+	}
+
 	if anonUser == "" {
-		die("Expected environment variable ANON_USER to be set")
+		die("Fatal: expected environment variable ANON_USER to be set")
 	}
 	if endpoint == "" {
-		die("Expected environment variable S3_ENDPOINT to be set")
+		die("Fatal: expected environment variable S3_ENDPOINT to be set")
 	}
 	if bucket == "" {
-		die("Expected environment variable S3_BUCKET to be set")
+		die("Fatal: expected environment variable S3_BUCKET to be set")
 	}
 
 	if accessKeyIDFile == "" {
-		die("Expected environment variable S3_ACCESS_KEY_ID_FILE to be set")
+		die("Fatal: expected environment variable S3_ACCESS_KEY_ID_FILE to be set")
 	}
 	if secretAccessKeyFile == "" {
-		die("Expected environment variable S3_SECRET_ACCESS_KEY_FILE to be set")
+		die("Fatal: expected environment variable S3_SECRET_ACCESS_KEY_FILE to be set")
 	}
 
 	accessKeyID, err := os.ReadFile(accessKeyIDFile)
 	if err != nil {
-		die("Failed to read access key ID from specified file: %s", err)
+		die("Fatal: failed to read access key ID from specified file: %s", err)
 	}
 	secretAccessKey, err := os.ReadFile(secretAccessKeyFile)
 	if err != nil {
-		die("Failed to read secret access key from specified file: %s", err)
+		die("Fatal: failed to read secret access key from specified file: %s", err)
 	}
 
 	mc, err := minio.New(endpoint, &minio.Options{
@@ -335,11 +345,11 @@ func main() {
 		Secure: true,
 	})
 	if err != nil {
-		die("Failed to create S3 client: %s", err)
+		die("Fatal: failed to create S3 client: %s", err)
 	}
 
 	if err = cgi.Serve(&handler{mc, bucket, anonUser}); err != nil {
-		die("Failed to serve CGI: %s", err)
+		die("Fatal: failed to serve CGI: %s", err)
 	}
 }
 
