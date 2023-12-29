@@ -286,34 +286,44 @@ func die(msg string, args ...any) {
 }
 
 func main() {
-	endpoint := os.Getenv("S3_ENDPOINT")
-	accessKeyID := os.Getenv("S3_ACCESS_KEY_ID")
-	secretAccessKey := os.Getenv("S3_SECRET_ACCESS_KEY")
-	bucket := os.Getenv("S3_BUCKET")
 	anonUser := os.Getenv("ANON_USER")
+	endpoint := os.Getenv("S3_ENDPOINT")
+	bucket := os.Getenv("S3_BUCKET")
+	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
+	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
 
+	if anonUser == "" {
+		die("Expected environment variable ANON_USER to be set")
+	}
 	if endpoint == "" {
 		die("Expected environment variable S3_ENDPOINT to be set")
-	}
-	if accessKeyID == "" {
-		die("Expected environment variable S3_ACCESS_KEY_ID to be set")
-	}
-	if secretAccessKey == "" {
-		die("Expected environment variable S3_SECRET_ACCESS_KEY to be set")
 	}
 	if bucket == "" {
 		die("Expected environment variable S3_BUCKET to be set")
 	}
-	if anonUser == "" {
-		die("Expected environment variable ANON_USER to be set")
+
+	if accessKeyIDFile == "" {
+		die("Expected environment variable S3_ACCESS_KEY_ID_FILE to be set")
+	}
+	if secretAccessKeyFile == "" {
+		die("Expected environment variable S3_SECRET_ACCESS_KEY_FILE to be set")
+	}
+
+	accessKeyID, err := os.ReadFile(accessKeyIDFile)
+	if err != nil {
+		die("Failed to read access key ID from specified file: %s", err)
+	}
+	secretAccessKey, err := os.ReadFile(secretAccessKeyFile)
+	if err != nil {
+		die("Failed to read secret access key from specified file: %s", err)
 	}
 
 	mc, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Creds:  credentials.NewStaticV4(string(accessKeyID), string(secretAccessKey), ""),
 		Secure: true,
 	})
 	if err != nil {
-		die("Failed to create S3 client")
+		die("Failed to create S3 client: %s", err)
 	}
 
 	if err = cgi.Serve(&handler{mc, bucket, anonUser}); err != nil {
