@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -97,14 +99,16 @@ type customClaims struct {
 }
 
 type authenticateResponse struct {
+	// When providing href, the Git LFS client will use href as the base URL
+	// instead of building the base URL using the Service Discovery mechanism.
+	// It should end with /info/lfs. See
+	// https://github.com/git-lfs/git-lfs/blob/baf40ac99850a62fe98515175d52df5c513463ec/docs/api/server-discovery.md#ssh
+	HRef   string            `json:"href,omitempty"`
 	Header map[string]string `json:"header"`
 	// In seconds.
 	ExpiresIn int64 `json:"expires_in,omitempty"`
 	// The expires_at (RFC3339) property could also be used, but we leave it
-	// out since we don't use it. It is also possibleto specify the href
-	// property, making the Git LFS use this instead of the usual Service
-	// Discovery mechanism. See
-	// https://github.com/git-lfs/git-lfs/blob/baf40ac99850a62fe98515175d52df5c513463ec/docs/api/server-discovery.md#ssh
+	// out since we don't use it.
 }
 
 func wipe(b []byte) {
@@ -128,10 +132,20 @@ func main() {
 		die("expected 2 arguments (path, operation), got %d", len(os.Args)-1)
 	}
 
-	path := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
+	repoPath := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
 	operation := os.Args[2]
 	if operation != "download" && operation != "upload" {
 		die("expected operation to be upload or download, got %s", operation)
+	}
+
+	repoHRefBaseStr := os.Getenv("REPO_HREF_BASE")
+	var repoHRefBase *url.URL
+	var err error
+	if repoHRefBaseStr != "" {
+		if repoHRefBase, err = url.Parse(repoHRefBaseStr); err != nil {
+			logger.logf("Failed to parse URL in environment variable REPO_HREF_BASE: %s", err)
+			dieReqID(reqID, "internal error")
+		}
 	}
 
 	user := os.Getenv("GL_USER")
@@ -165,10 +179,10 @@ func main() {
 	}
 	privateKey := ed25519.NewKeyFromSeed(seed)
 
-	if !getGitoliteAccess(logger, reqID, path, user, "R") {
+	if !getGitoliteAccess(logger, reqID, repoPath, user, "R") {
 		die("repository not found")
 	}
-	if operation == "upload" && !getGitoliteAccess(logger, reqID, path, user, "W") {
+	if operation == "upload" && !getGitoliteAccess(logger, reqID, repoPath, user, "W") {
 		// User has read access but no write access
 		die("forbidden")
 	}
@@ -176,7 +190,7 @@ func main() {
 	expiresIn := time.Hour * 24
 	claims := customClaims{
 		Gitolfs3: gitolfs3Claims{
-			Repository: path,
+			Repository: repoPath,
 			Permission: operation,
 		},
 		RegisteredClaims: &jwt.RegisteredClaims{
@@ -198,6 +212,11 @@ func main() {
 			"Authorization": "Bearer " + ss,
 		},
 		ExpiresIn: int64(expiresIn.Seconds()),
+	}
+	if repoHRefBase != nil {
+		response.HRef = repoHRefBase.ResolveReference(&url.URL{
+			Path: path.Join(repoPath, "/info/lfs"),
+		}).String()
 	}
 	json.NewEncoder(os.Stdout).Encode(response)
 }
