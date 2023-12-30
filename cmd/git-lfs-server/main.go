@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,10 +17,12 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/rs/xid"
@@ -86,6 +91,7 @@ type handler struct {
 	bucket       string
 	anonUser     string
 	gitolitePath string
+	publicKey    ed25519.PublicKey
 }
 
 // Requires lowercase hash
@@ -172,6 +178,36 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 	}
 }
 
+func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
+	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
+	expiresIn := time.Hour * 24
+
+	presigned, err := h.mc.Presign(ctx, http.MethodPut, h.bucket, fullPath, expiresIn, url.Values{
+		"x-amz-sdk-checksum-algorithm": {"sha256"},
+		"x-amz-checksum-sha256":        {obj.fullHash},
+		"Content-Length":               {strconv.FormatUint(obj.size, 10)},
+	})
+	if err != nil {
+		// TODO: consider not making this an object-specific, but rather a
+		// generic error such that the entire Batch API request fails.
+		reqlog(ctx, "Failed to generate action href (full path: %s): %s", fullPath, err)
+		return makeObjError(obj, "Failed to generate action href", http.StatusInternalServerError)
+	}
+
+	authenticated := true
+	return batchResponseObject{
+		OID:           obj.fullHash,
+		Size:          obj.size,
+		Authenticated: &authenticated,
+		Actions: map[operation]batchAction{
+			operationUpload: {
+				HRef:      presigned.String(),
+				ExpiresIn: int64(expiresIn.Seconds()),
+			},
+		},
+	}
+}
+
 type parsedBatchObject struct {
 	firstByte  string
 	secondByte string
@@ -195,6 +231,103 @@ var re = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
 type requestID struct{}
 
 var requestIDKey requestID
+
+// TODO: make a shared package for this
+type gitolfs3Claims struct {
+	Repository string    `json:"repository"`
+	Permission operation `json:"permission"`
+}
+
+type customClaims struct {
+	Gitolfs3 gitolfs3Claims `json:"gitolfs3"`
+	*jwt.RegisteredClaims
+}
+
+// Request to perform <operation> in <repository> [on reference <refspec>]
+type operationRequest struct {
+	operation  operation
+	repository string
+	refspec    *string
+}
+
+func getGitoliteAccess(repo, user, gitolitePerm string, refspec *string) (bool, error) {
+	// gitolite access -q: returns only exit code
+	gitoliteArgs := []string{"access", "-q", repo, user, gitolitePerm}
+	if refspec != nil {
+		gitoliteArgs = append(gitoliteArgs, *refspec)
+	}
+	cmd := exec.Command("gitolite", gitoliteArgs...)
+	err := cmd.Run()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return false, fmt.Errorf("(running %s): %w", cmd, err)
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.Request, or operationRequest) bool {
+	user := h.anonUser
+
+	if authz := r.Header.Get("Authorization"); authz != "" {
+		if !strings.HasPrefix(authz, "Bearer ") {
+			makeRespError(ctx, w, "Invalid Authorization header", http.StatusBadRequest)
+			return false
+		}
+		authz = strings.TrimPrefix(authz, "Bearer ")
+
+		var claims customClaims
+		_, err := jwt.ParseWithClaims(authz, &claims, func(token *jwt.Token) (any, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
+				return nil, fmt.Errorf("expected signing method EdDSA, got %s", token.Header["alg"])
+			}
+			return h.publicKey, nil
+		})
+		if err != nil {
+			makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+			return false
+		}
+
+		if claims.Gitolfs3.Repository != or.repository {
+			makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+			return false
+		}
+		if claims.Gitolfs3.Permission == operationDownload && or.operation == operationUpload {
+			makeRespError(ctx, w, "Forbidden", http.StatusForbidden)
+			return false
+		}
+
+		user = claims.Subject
+	}
+
+	readAccess, err := getGitoliteAccess(or.repository, user, "R", or.refspec)
+	if err != nil {
+		reqlog(ctx, "Error checking access info: %s", err)
+		makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
+		return false
+	}
+	if !readAccess {
+		makeRespError(ctx, w, "Repository not found", http.StatusNotFound)
+		return false
+	}
+	if or.operation == operationUpload {
+		writeAccess, err := getGitoliteAccess(or.repository, user, "W", or.refspec)
+		if err != nil {
+			reqlog(ctx, "Error checking access info: %s", err)
+			makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
+			return false
+		}
+		// User has read access but no write access
+		if !writeAccess {
+			makeRespError(ctx, w, "Forbidden", http.StatusForbidden)
+			return false
+		}
+	}
+
+	return true
+}
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
@@ -229,42 +362,29 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		makeRespError(ctx, w, "Failed to parse request body as JSON", http.StatusBadRequest)
 		return
 	}
+	if body.Operation != operationDownload && body.Operation != operationUpload {
+		makeRespError(ctx, w, "Invalid operation specified", http.StatusBadRequest)
+		return
+	}
+
+	or := operationRequest{
+		operation:  body.Operation,
+		repository: repo,
+	}
+	if body.Ref != nil {
+		or.refspec = &body.Ref.Name
+	}
+	if !h.authorize(ctx, w, r, or) {
+		return
+	}
 
 	if body.HashAlgo != hashAlgoSHA256 {
 		makeRespError(ctx, w, "Unsupported hash algorithm specified", http.StatusConflict)
 		return
 	}
 
-	// TODO: handle authentication
-	// right now, we're just trying to make everything publically accessible
-	if body.Operation == operationUpload {
-		makeRespError(ctx, w, "Upload operations are currently not supported", http.StatusForbidden)
-		return
-	}
-
 	if len(body.Transfers) != 0 && !slices.Contains(body.Transfers, transferAdapterBasic) {
 		makeRespError(ctx, w, "Unsupported transfer adapter specified (supported: basic)", http.StatusConflict)
-		return
-	}
-
-	gitoliteArgs := []string{"access", "-q", repo, h.anonUser, "R"}
-	if body.Ref != nil && body.Ref.Name != "" {
-		gitoliteArgs = append(gitoliteArgs, body.Ref.Name)
-	}
-	cmd := exec.Command(h.gitolitePath, gitoliteArgs...)
-	err := cmd.Run()
-	permGranted := err == nil
-	var exitErr *exec.ExitError
-	if err != nil && !errors.As(err, &exitErr) {
-		reqlog(ctx, "Error checking access info (running %s): %s", cmd, err)
-		makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
-		return
-	}
-	if !permGranted {
-		// TODO: when handling authorization, make sure to return 403 Forbidden
-		// here when the user *does* have read permissions, but is not allowed
-		// to write when requesting an upload operation.
-		makeRespError(ctx, w, "Repository not found", http.StatusNotFound)
 		return
 	}
 
@@ -288,7 +408,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HashAlgo: hashAlgoSHA256,
 	}
 	for _, obj := range objects {
-		resp.Objects = append(resp.Objects, h.handleDownloadObject(ctx, repo, obj))
+		switch body.Operation {
+		case operationDownload:
+			resp.Objects = append(resp.Objects, h.handleDownloadObject(ctx, repo, obj))
+		case operationUpload:
+			resp.Objects = append(resp.Objects, h.handleUploadObject(ctx, repo, obj))
+		}
 	}
 
 	w.Header().Set("Content-Type", lfsMIME)
@@ -316,6 +441,23 @@ func die(msg string, args ...any) {
 	os.Exit(1)
 }
 
+func loadPublicKey(path string) ed25519.PublicKey {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		die("Failed to open specified public key: %s", err)
+	}
+	raw = bytes.TrimSpace(raw)
+
+	if hex.DecodedLen(len(raw)) != ed25519.PublicKeySize {
+		die("Specified public key file does not contain key of appropriate length")
+	}
+	decoded := make([]byte, hex.DecodedLen(len(raw)))
+	if _, err = hex.Decode(decoded, raw); err != nil {
+		die("Failed to decode specified public key: %s", err)
+	}
+	return decoded
+}
+
 func main() {
 	log("Environment variables:")
 	for _, s := range os.Environ() {
@@ -323,6 +465,7 @@ func main() {
 	}
 
 	anonUser := os.Getenv("ANON_USER")
+	publicKeyPath := os.Getenv("GITOLFS3_PUBLIC_KEY_PATH")
 	endpoint := os.Getenv("S3_ENDPOINT")
 	bucket := os.Getenv("S3_BUCKET")
 	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
@@ -335,6 +478,9 @@ func main() {
 
 	if anonUser == "" {
 		die("Fatal: expected environment variable ANON_USER to be set")
+	}
+	if publicKeyPath == "" {
+		die("Fatal: expected environment variable GITOLFS3_PUBLIC_KEY_PATH to be set")
 	}
 	if endpoint == "" {
 		die("Fatal: expected environment variable S3_ENDPOINT to be set")
@@ -359,6 +505,8 @@ func main() {
 		die("Fatal: failed to read secret access key from specified file: %s", err)
 	}
 
+	publicKey := loadPublicKey(publicKeyPath)
+
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(string(accessKeyID), string(secretAccessKey), ""),
 		Secure: true,
@@ -367,7 +515,7 @@ func main() {
 		die("Fatal: failed to create S3 client: %s", err)
 	}
 
-	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath}); err != nil {
+	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath, publicKey}); err != nil {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
 }

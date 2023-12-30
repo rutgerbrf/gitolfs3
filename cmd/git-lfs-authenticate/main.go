@@ -100,8 +100,11 @@ type authenticateResponse struct {
 	Header map[string]string `json:"header"`
 	// In seconds.
 	ExpiresIn int64 `json:"expires_in,omitempty"`
-	// expires_at (RFC3339) could also be used, but we leave it out since we
-	// don't use it.
+	// The expires_at (RFC3339) property could also be used, but we leave it
+	// out since we don't use it. It is also possibleto specify the href
+	// property, making the Git LFS use this instead of the usual Service
+	// Discovery mechanism. See
+	// https://github.com/git-lfs/git-lfs/blob/baf40ac99850a62fe98515175d52df5c513463ec/docs/api/server-discovery.md#ssh
 }
 
 func wipe(b []byte) {
