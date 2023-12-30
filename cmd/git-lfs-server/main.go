@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -134,6 +135,14 @@ func makeObjError(obj parsedBatchObject, message string, code int) batchResponse
 	}
 }
 
+func sha256AsBase64(hash string) string {
+	raw, err := hex.DecodeString(hash)
+	if err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
 func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
 	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
 	expiresIn := time.Hour * 24
@@ -184,7 +193,7 @@ func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parse
 
 	presigned, err := h.mc.Presign(ctx, http.MethodPut, h.bucket, fullPath, expiresIn, url.Values{
 		"x-amz-sdk-checksum-algorithm": {"sha256"},
-		"x-amz-checksum-sha256":        {obj.fullHash},
+		"x-amz-checksum-sha256":        {sha256AsBase64(obj.fullHash)},
 		"Content-Length":               {strconv.FormatUint(obj.size, 10)},
 	})
 	if err != nil {
@@ -331,6 +340,11 @@ func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
+
+	if r.Method != http.MethodPost {
+		makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
 	reqPath := os.Getenv("PATH_INFO")
 	if reqPath == "" {
