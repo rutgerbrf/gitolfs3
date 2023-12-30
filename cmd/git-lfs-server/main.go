@@ -194,6 +194,7 @@ func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parse
 	presigned, err := h.mc.Presign(ctx, http.MethodPut, h.bucket, fullPath, expiresIn, url.Values{
 		"x-amz-sdk-checksum-algorithm": {"sha256"},
 		"x-amz-checksum-sha256":        {sha256AsBase64(obj.fullHash)},
+		"x-amz-content-sha256":         {obj.fullHash},
 		"Content-Length":               {strconv.FormatUint(obj.size, 10)},
 	})
 	if err != nil {
