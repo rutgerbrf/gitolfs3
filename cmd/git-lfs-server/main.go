@@ -437,6 +437,10 @@ func log(msg string, args ...any) {
 }
 
 func die(msg string, args ...any) {
+	log("Environment variables: (dying)")
+	for _, s := range os.Environ() {
+		log("  %s", s)
+	}
 	log(msg, args...)
 	os.Exit(1)
 }
@@ -459,11 +463,6 @@ func loadPublicKey(path string) ed25519.PublicKey {
 }
 
 func main() {
-	log("Environment variables:")
-	for _, s := range os.Environ() {
-		log("  %s", s)
-	}
-
 	anonUser := os.Getenv("ANON_USER")
 	publicKeyPath := os.Getenv("GITOLFS3_PUBLIC_KEY_PATH")
 	endpoint := os.Getenv("S3_ENDPOINT")
