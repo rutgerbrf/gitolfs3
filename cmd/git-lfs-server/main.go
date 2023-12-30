@@ -14,7 +14,6 @@ import (
 	"path"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -54,29 +53,13 @@ type batchRequest struct {
 	HashAlgo  hashAlgo             `json:"hash_algo,omitempty"`
 }
 
-type RFC3339SecondsTime time.Time
-
-func (t RFC3339SecondsTime) MarshalJSON() ([]byte, error) {
-	b := make([]byte, 0, len(time.RFC3339)+len(`""`))
-	b = append(b, '"')
-	b = time.Time(t).AppendFormat(b, time.RFC3339)
-	b = append(b, '"')
-	return b, nil
-}
-
-type SecondDuration time.Duration
-
-func (d SecondDuration) MarshalJSON() ([]byte, error) {
-	var b []byte
-	b = strconv.AppendInt(b, int64(time.Duration(d).Seconds()), 10)
-	return b, nil
-}
-
 type batchAction struct {
-	HRef      string              `json:"href"`
-	Header    map[string]string   `json:"header,omitempty"`
-	ExpiresIn *SecondDuration     `json:"expires_in,omitempty"`
-	ExpiresAt *RFC3339SecondsTime `json:"expires_at,omitempty"`
+	HRef   string            `json:"href"`
+	Header map[string]string `json:"header,omitempty"`
+	// In seconds.
+	ExpiresIn int64 `json:"expires_in,omitempty"`
+	// expires_at (RFC3339) could also be used, but we leave it out since we
+	// don't use it.
 }
 
 type batchError struct {
@@ -148,7 +131,6 @@ func makeObjError(obj parsedBatchObject, message string, code int) batchResponse
 func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
 	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
 	expiresIn := time.Hour * 24
-	expiresInSeconds := SecondDuration(expiresIn)
 
 	info, err := h.mc.StatObject(ctx, h.bucket, fullPath, minio.StatObjectOptions{Checksum: true})
 	if err != nil {
@@ -184,7 +166,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 		Actions: map[operation]batchAction{
 			operationDownload: {
 				HRef:      presigned.String(),
-				ExpiresIn: &expiresInSeconds,
+				ExpiresIn: int64(expiresIn.Seconds()),
 			},
 		},
 	}
