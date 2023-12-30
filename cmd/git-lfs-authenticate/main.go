@@ -37,7 +37,8 @@ func (l *logger) writer() io.WriteCloser {
 		l.m.Lock()
 		if l.wc.Load() == nil {
 			os.MkdirAll(".gitolfs3/logs/", 0o700) // Mode: drwx------
-			path := fmt.Sprintf(".gitolfs3/logs/gitolfs3-%s-%s.log", l.time, l.reqID)
+			ts := l.time.Format("2006-01-02")
+			path := fmt.Sprintf(".gitolfs3/logs/gitolfs3-%s-%s.log", ts, l.reqID)
 			var err error
 			if w, err = os.Create(path); err == nil {
 				l.wc.Store(w)
