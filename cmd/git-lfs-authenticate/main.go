@@ -36,7 +36,7 @@ func (l *logger) writer() io.WriteCloser {
 	if w == nil {
 		l.m.Lock()
 		if l.wc.Load() == nil {
-			os.MkdirAll(".gitolfs3/logs/", 0o600) // drw-------
+			os.MkdirAll(".gitolfs3/logs/", 0o700) // Mode: drwx------
 			path := fmt.Sprintf(".gitolfs3/logs/gitolfs3-%s-%s.log", l.time, l.reqID)
 			var err error
 			if w, err = os.Create(path); err == nil {
@@ -68,7 +68,7 @@ func die(msg string, args ...any) {
 func dieReqID(reqID string, msg string, args ...any) {
 	fmt.Fprint(os.Stderr, "Error: ")
 	fmt.Fprintf(os.Stderr, msg, args...)
-	fmt.Fprintf(os.Stderr, "(request ID: %s)\n", reqID)
+	fmt.Fprintf(os.Stderr, " (request ID: %s)\n", reqID)
 	os.Exit(1)
 }
 
