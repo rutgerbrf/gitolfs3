@@ -250,13 +250,13 @@ type operationRequest struct {
 	refspec    *string
 }
 
-func getGitoliteAccess(repo, user, gitolitePerm string, refspec *string) (bool, error) {
+func (h *handler) getGitoliteAccess(repo, user, gitolitePerm string, refspec *string) (bool, error) {
 	// gitolite access -q: returns only exit code
 	gitoliteArgs := []string{"access", "-q", repo, user, gitolitePerm}
 	if refspec != nil {
 		gitoliteArgs = append(gitoliteArgs, *refspec)
 	}
-	cmd := exec.Command("gitolite", gitoliteArgs...)
+	cmd := exec.Command(h.gitolitePath, gitoliteArgs...)
 	err := cmd.Run()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -302,7 +302,7 @@ func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.
 		user = claims.Subject
 	}
 
-	readAccess, err := getGitoliteAccess(or.repository, user, "R", or.refspec)
+	readAccess, err := h.getGitoliteAccess(or.repository, user, "R", or.refspec)
 	if err != nil {
 		reqlog(ctx, "Error checking access info: %s", err)
 		makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
@@ -313,7 +313,7 @@ func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.
 		return false
 	}
 	if or.operation == operationUpload {
-		writeAccess, err := getGitoliteAccess(or.repository, user, "W", or.refspec)
+		writeAccess, err := h.getGitoliteAccess(or.repository, user, "W", or.refspec)
 		if err != nil {
 			reqlog(ctx, "Error checking access info: %s", err)
 			makeRespError(ctx, w, "Failed to query access information", http.StatusInternalServerError)
