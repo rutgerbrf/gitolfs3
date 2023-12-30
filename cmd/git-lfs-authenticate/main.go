@@ -132,7 +132,7 @@ func main() {
 		die("expected 2 arguments (path, operation), got %d", len(os.Args)-1)
 	}
 
-	repoPath := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
+	repo := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
 	operation := os.Args[2]
 	if operation != "download" && operation != "upload" {
 		die("expected operation to be upload or download, got %s", operation)
@@ -179,10 +179,10 @@ func main() {
 	}
 	privateKey := ed25519.NewKeyFromSeed(seed)
 
-	if !getGitoliteAccess(logger, reqID, repoPath, user, "R") {
+	if !getGitoliteAccess(logger, reqID, repo, user, "R") {
 		die("repository not found")
 	}
-	if operation == "upload" && !getGitoliteAccess(logger, reqID, repoPath, user, "W") {
+	if operation == "upload" && !getGitoliteAccess(logger, reqID, repo, user, "W") {
 		// User has read access but no write access
 		die("forbidden")
 	}
@@ -190,7 +190,7 @@ func main() {
 	expiresIn := time.Hour * 24
 	claims := customClaims{
 		Gitolfs3: gitolfs3Claims{
-			Repository: repoPath,
+			Repository: repo,
 			Permission: operation,
 		},
 		RegisteredClaims: &jwt.RegisteredClaims{
@@ -215,7 +215,7 @@ func main() {
 	}
 	if repoHRefBase != nil {
 		response.HRef = repoHRefBase.ResolveReference(&url.URL{
-			Path: path.Join(repoPath, "/info/lfs"),
+			Path: path.Join(repo+".git", "/info/lfs"),
 		}).String()
 	}
 	json.NewEncoder(os.Stdout).Encode(response)
