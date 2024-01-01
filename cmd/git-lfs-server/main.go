@@ -396,7 +396,7 @@ func isLFSMediaType(t string) bool {
 }
 
 var reBatchAPI = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
-var reObjUpload = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{2}){64}$`)
+var reObjUpload = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{64})$`)
 
 type requestID struct{}
 
