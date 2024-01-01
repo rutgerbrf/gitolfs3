@@ -613,7 +613,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		reqlog(ctx, "Repository: %s; OID: %s", repo, oid)
 
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPut {
 			makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
