@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
+	"io"
 	"mime"
 	"net/http"
 	"net/http/cgi"
@@ -48,7 +51,7 @@ type batchRef struct {
 
 type batchRequestObject struct {
 	OID  string `json:"oid"`
-	Size uint64 `json:"size"`
+	Size int64  `json:"size"`
 }
 
 type batchRequest struct {
@@ -75,7 +78,7 @@ type batchError struct {
 
 type batchResponseObject struct {
 	OID           string                    `json:"oid"`
-	Size          uint64                    `json:"size"`
+	Size          int64                     `json:"size"`
 	Authenticated *bool                     `json:"authenticated"`
 	Actions       map[operation]batchAction `json:"actions,omitempty"`
 	Error         *batchError               `json:"error,omitempty"`
@@ -92,10 +95,10 @@ type handler struct {
 	bucket       string
 	anonUser     string
 	gitolitePath string
-	publicKey    ed25519.PublicKey
+	privateKey   ed25519.PrivateKey
+	baseURL      *url.URL
 }
 
-// Requires lowercase hash
 func isValidSHA256Hash(hash string) bool {
 	if len(hash) != 64 {
 		return false
@@ -161,7 +164,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 	if info.ChecksumSHA256 != "" && strings.ToLower(info.ChecksumSHA256) != obj.fullHash {
 		return makeObjError(obj, "Corrupted file", http.StatusUnprocessableEntity)
 	}
-	if uint64(info.Size) != obj.size {
+	if info.Size != obj.size {
 		return makeObjError(obj, "Incorrect size specified for object", http.StatusUnprocessableEntity)
 	}
 
@@ -187,34 +190,190 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 	}
 }
 
-func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
-	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
-	expiresIn := time.Hour * 24
+type uploadObjectGitolfs3Claims struct {
+	Repository string `json:"repository"`
+	OID        string `json:"oid"`
+	Size       int64  `json:"size"`
+}
 
-	presigned, err := h.mc.Presign(ctx, http.MethodPut, h.bucket, fullPath, expiresIn, url.Values{
-		"x-amz-sdk-checksum-algorithm": {"sha256"},
-		"x-amz-checksum-sha256":        {sha256AsBase64(obj.fullHash)},
-		"x-amz-content-sha256":         {obj.fullHash},
-		"Content-Length":               {strconv.FormatUint(obj.size, 10)},
-	})
-	if err != nil {
+type uploadObjectCustomClaims struct {
+	Gitolfs3 uploadObjectGitolfs3Claims `json:"gitolfs3"`
+	*jwt.RegisteredClaims
+}
+
+// Return nil when the object already exists
+func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parsedBatchObject) *batchResponseObject {
+	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
+	_, err := h.mc.StatObject(ctx, h.bucket, fullPath, minio.GetObjectOptions{})
+	if err == nil {
+		// The object exists
+		return nil
+	}
+
+	var resp minio.ErrorResponse
+	if !errors.As(err, &resp) || resp.StatusCode != http.StatusNotFound {
 		// TODO: consider not making this an object-specific, but rather a
 		// generic error such that the entire Batch API request fails.
 		reqlog(ctx, "Failed to generate action href (full path: %s): %s", fullPath, err)
-		return makeObjError(obj, "Failed to generate action href", http.StatusInternalServerError)
+		objErr := makeObjError(obj, "Failed to generate action href", http.StatusInternalServerError)
+		return &objErr
 	}
 
+	expiresIn := time.Hour * 24
+	claims := uploadObjectCustomClaims{
+		Gitolfs3: uploadObjectGitolfs3Claims{
+			Repository: repo,
+			OID:        obj.fullHash,
+			Size:       obj.size,
+		},
+		RegisteredClaims: &jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresIn)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
+	ss, err := token.SignedString(h.privateKey)
+	if err != nil {
+		// TODO: consider not making this an object-specific, but rather a
+		// generic error such that the entire Batch API request fails.
+		reqlog(ctx, "Fatal: failed to generate JWT: %s", err)
+		objErr := makeObjError(obj, "Failed to generate token", http.StatusInternalServerError)
+		return &objErr
+	}
+
+	uploadPath := path.Join(repo+".git", "info/lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
+	uploadHRef := h.baseURL.ResolveReference(&url.URL{Path: uploadPath}).String()
+	// The object does not exist.
 	authenticated := true
-	return batchResponseObject{
+	return &batchResponseObject{
 		OID:           obj.fullHash,
 		Size:          obj.size,
 		Authenticated: &authenticated,
 		Actions: map[operation]batchAction{
 			operationUpload: {
-				HRef:      presigned.String(),
+				Header: map[string]string{
+					"Authorization": "Bearer " + ss,
+				},
+				HRef:      uploadHRef,
 				ExpiresIn: int64(expiresIn.Seconds()),
 			},
 		},
+	}
+}
+
+type validatingReader struct {
+	promisedSize   int64
+	promisedSha256 []byte
+
+	reader    io.Reader
+	bytesRead int64
+	current   hash.Hash
+	err       error
+}
+
+func newValidatingReader(promisedSize int64, promisedSha256 []byte, r io.Reader) *validatingReader {
+	return &validatingReader{
+		promisedSize:   promisedSize,
+		promisedSha256: promisedSha256,
+		reader:         r,
+		current:        sha256.New(),
+	}
+}
+
+var errTooBig = errors.New("validator: uploaded file bigger than indicated")
+var errTooSmall = errors.New("validator: uploaded file smaller than indicated")
+var errBadSum = errors.New("validator: bad checksum provided or file corrupted")
+
+func (i *validatingReader) Read(b []byte) (int, error) {
+	if i.err != nil {
+		return 0, i.err
+	}
+	n, err := i.reader.Read(b)
+	i.bytesRead += int64(n)
+	if i.bytesRead > i.promisedSize {
+		i.err = errTooBig
+		return 0, i.err
+	}
+	if err != nil && errors.Is(err, io.EOF) {
+		if i.bytesRead < i.promisedSize {
+			i.err = errTooSmall
+			return n, i.err
+		}
+	}
+	// According to the documentation, Hash.Write never returns an error
+	i.current.Write(b[:n])
+	if i.bytesRead == i.promisedSize {
+		if !bytes.Equal(i.promisedSha256, i.current.Sum(nil)) {
+			i.err = errBadSum
+			return 0, i.err
+		}
+	}
+	return n, err
+}
+
+func (h *handler) handlePutObject(w http.ResponseWriter, r *http.Request, repo, oid string) {
+	ctx := r.Context()
+
+	authz := r.Header.Get("Authorization")
+	if authz == "" {
+		makeRespError(ctx, w, "Missing Authorization header", http.StatusBadRequest)
+		return
+	}
+	if !strings.HasPrefix(authz, "Bearer ") {
+		makeRespError(ctx, w, "Invalid Authorization header", http.StatusBadRequest)
+		return
+	}
+	authz = strings.TrimPrefix(authz, "Bearer ")
+
+	var claims uploadObjectCustomClaims
+	_, err := jwt.ParseWithClaims(authz, &claims, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
+			return nil, fmt.Errorf("expected signing method EdDSA, got %s", token.Header["alg"])
+		}
+		return h.privateKey.Public(), nil
+	})
+	if err != nil {
+		makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	if claims.Gitolfs3.Repository != repo {
+		makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+	if claims.Gitolfs3.OID != oid {
+		makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Check with claims
+	if lengthStr := r.Header.Get("Content-Length"); lengthStr != "" {
+		length, err := strconv.ParseInt(lengthStr, 10, 64)
+		if err != nil {
+			makeRespError(ctx, w, "Bad Content-Length format", http.StatusBadRequest)
+			return
+		}
+		if length != claims.Gitolfs3.Size {
+			makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	sha256Raw, err := hex.DecodeString(oid)
+	if err != nil || len(sha256Raw) != sha256.Size {
+		makeRespError(ctx, w, "Invalid OID", http.StatusBadRequest)
+		return
+	}
+
+	reader := newValidatingReader(claims.Gitolfs3.Size, sha256Raw, r.Body)
+
+	fullPath := path.Join(repo+".git", "lfs/objects", oid[:2], oid[2:4], oid)
+	_, err = h.mc.PutObject(ctx, h.bucket, fullPath, reader, int64(claims.Gitolfs3.Size), minio.PutObjectOptions{
+		SendContentMd5: true,
+	})
+	if err != nil {
+		makeRespError(ctx, w, "Failed to upload object", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -222,7 +381,7 @@ type parsedBatchObject struct {
 	firstByte  string
 	secondByte string
 	fullHash   string
-	size       uint64
+	size       int64
 }
 
 func isLFSMediaType(t string) bool {
@@ -236,20 +395,21 @@ func isLFSMediaType(t string) bool {
 	return false
 }
 
-var re = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
+var reBatchAPI = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/batch$`)
+var reObjUpload = regexp.MustCompile(`^([a-zA-Z0-9-_/]+)\.git/info/lfs/objects/([0-9a-f]{2})/([0-9a-f]{2})/([0-9a-f]{2}){64}$`)
 
 type requestID struct{}
 
 var requestIDKey requestID
 
 // TODO: make a shared package for this
-type gitolfs3Claims struct {
+type lfsAuthGitolfs3Claims struct {
 	Repository string    `json:"repository"`
 	Permission operation `json:"permission"`
 }
 
-type customClaims struct {
-	Gitolfs3 gitolfs3Claims `json:"gitolfs3"`
+type lfsAuthCustomClaims struct {
+	Gitolfs3 lfsAuthGitolfs3Claims `json:"gitolfs3"`
 	*jwt.RegisteredClaims
 }
 
@@ -278,8 +438,9 @@ func (h *handler) getGitoliteAccess(repo, user, gitolitePerm string, refspec *st
 	return true, nil
 }
 
-func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.Request, or operationRequest) bool {
+func (h *handler) authorize(w http.ResponseWriter, r *http.Request, or operationRequest) bool {
 	user := h.anonUser
+	ctx := r.Context()
 
 	if authz := r.Header.Get("Authorization"); authz != "" {
 		if !strings.HasPrefix(authz, "Bearer ") {
@@ -288,12 +449,12 @@ func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.
 		}
 		authz = strings.TrimPrefix(authz, "Bearer ")
 
-		var claims customClaims
+		var claims lfsAuthCustomClaims
 		_, err := jwt.ParseWithClaims(authz, &claims, func(token *jwt.Token) (any, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodEd25519); !ok {
 				return nil, fmt.Errorf("expected signing method EdDSA, got %s", token.Header["alg"])
 			}
-			return h.publicKey, nil
+			return h.privateKey.Public(), nil
 		})
 		if err != nil {
 			makeRespError(ctx, w, "Invalid token", http.StatusUnauthorized)
@@ -339,29 +500,8 @@ func (h *handler) authorize(ctx context.Context, w http.ResponseWriter, r *http.
 	return true
 }
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
-
-	if r.Method != http.MethodPost {
-		makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	reqPath := os.Getenv("PATH_INFO")
-	if reqPath == "" {
-		reqPath = r.URL.Path
-	}
-	reqlog(ctx, "reqPath: %s", reqPath)
-	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
-	reqlog(ctx, "Cleaned reqPath: %s", reqPath)
-	submatches := re.FindStringSubmatch(reqPath)
-	if len(submatches) != 2 {
-		reqlog(ctx, "Got path: %s, did not match regex", reqPath)
-		makeRespError(ctx, w, "Not found", http.StatusNotFound)
-		return
-	}
-	repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
-	reqlog(ctx, "Repository: %s", repo)
+func (h *handler) handleBatchAPI(w http.ResponseWriter, r *http.Request, repo string) {
+	ctx := r.Context()
 
 	if !slices.ContainsFunc(r.Header.Values("Accept"), isLFSMediaType) {
 		makeRespError(ctx, w, "Expected "+lfsMIME+" (with UTF-8 charset) in list of acceptable response media types", http.StatusNotAcceptable)
@@ -389,7 +529,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if body.Ref != nil {
 		or.refspec = &body.Ref.Name
 	}
-	if !h.authorize(ctx, w, r, or) {
+	if !h.authorize(w, r.WithContext(ctx), or) {
 		return
 	}
 
@@ -427,13 +567,62 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case operationDownload:
 			resp.Objects = append(resp.Objects, h.handleDownloadObject(ctx, repo, obj))
 		case operationUpload:
-			resp.Objects = append(resp.Objects, h.handleUploadObject(ctx, repo, obj))
+			if respObj := h.handleUploadObject(ctx, repo, obj); respObj != nil {
+				resp.Objects = append(resp.Objects, *respObj)
+			}
 		}
 	}
 
 	w.Header().Set("Content-Type", lfsMIME)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
+
+	reqPath := os.Getenv("PATH_INFO")
+	if reqPath == "" {
+		reqPath = r.URL.Path
+	}
+	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
+
+	if submatches := reBatchAPI.FindStringSubmatch(reqPath); len(submatches) == 2 {
+		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
+		reqlog(ctx, "Repository: %s", repo)
+
+		if r.Method != http.MethodPost {
+			makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		h.handleBatchAPI(w, r.WithContext(ctx), repo)
+		return
+	}
+
+	if submatches := reObjUpload.FindStringSubmatch(reqPath); len(submatches) == 5 {
+		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
+		oid0, oid1, oid := submatches[2], submatches[3], submatches[4]
+
+		if !isValidSHA256Hash(oid) {
+			panic("Regex should only allow valid SHA256 hashes")
+		}
+		if oid0 != oid[:2] || oid1 != oid[2:4] {
+			makeRespError(ctx, w, "Bad URL format: malformed OID pattern", http.StatusBadRequest)
+			return
+		}
+		reqlog(ctx, "Repository: %s; OID: %s", repo, oid)
+
+		if r.Method != http.MethodPost {
+			makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		h.handleBatchAPI(w, r.WithContext(ctx), repo)
+		return
+	}
+
+	makeRespError(ctx, w, "Not found", http.StatusNotFound)
 }
 
 func reqlog(ctx context.Context, msg string, args ...any) {
@@ -460,31 +649,38 @@ func die(msg string, args ...any) {
 	os.Exit(1)
 }
 
-func loadPublicKey(path string) ed25519.PublicKey {
+func loadPrivateKey(path string) ed25519.PrivateKey {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		die("Failed to open specified public key: %s", err)
 	}
 	raw = bytes.TrimSpace(raw)
 
-	if hex.DecodedLen(len(raw)) != ed25519.PublicKeySize {
-		die("Specified public key file does not contain key of appropriate length")
+	if hex.DecodedLen(len(raw)) != ed25519.SeedSize {
+		die("Specified public key file does not contain key (seed) of appropriate length")
 	}
 	decoded := make([]byte, hex.DecodedLen(len(raw)))
 	if _, err = hex.Decode(decoded, raw); err != nil {
 		die("Failed to decode specified public key: %s", err)
 	}
-	return decoded
+	return ed25519.NewKeyFromSeed(decoded)
+}
+
+func wipe(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
 }
 
 func main() {
 	anonUser := os.Getenv("ANON_USER")
-	publicKeyPath := os.Getenv("GITOLFS3_PUBLIC_KEY_PATH")
+	privateKeyPath := os.Getenv("GITOLFS3_PRIVATE_KEY_PATH")
 	endpoint := os.Getenv("S3_ENDPOINT")
 	bucket := os.Getenv("S3_BUCKET")
 	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
 	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
 	gitolitePath := os.Getenv("GITOLITE_PATH")
+	baseURLStr := os.Getenv("BASE_URL")
 
 	if gitolitePath == "" {
 		gitolitePath = "gitolite"
@@ -493,8 +689,11 @@ func main() {
 	if anonUser == "" {
 		die("Fatal: expected environment variable ANON_USER to be set")
 	}
-	if publicKeyPath == "" {
-		die("Fatal: expected environment variable GITOLFS3_PUBLIC_KEY_PATH to be set")
+	if privateKeyPath == "" {
+		die("Fatal: expected environment variable GITOLFS3_PRIVATE_KEY_PATH to be set")
+	}
+	if baseURLStr == "" {
+		die("Fatal: expected environment variable BASE_URL to be set")
 	}
 	if endpoint == "" {
 		die("Fatal: expected environment variable S3_ENDPOINT to be set")
@@ -519,7 +718,13 @@ func main() {
 		die("Fatal: failed to read secret access key from specified file: %s", err)
 	}
 
-	publicKey := loadPublicKey(publicKeyPath)
+	privateKey := loadPrivateKey(privateKeyPath)
+	defer wipe(privateKey)
+
+	baseURL, err := url.Parse(baseURLStr)
+	if err != nil {
+		die("Fatal: provided BASE_URL has bad format: %s", err)
+	}
 
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(string(accessKeyID), string(secretAccessKey), ""),
@@ -529,7 +734,7 @@ func main() {
 		die("Fatal: failed to create S3 client: %s", err)
 	}
 
-	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath, publicKey}); err != nil {
+	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath, privateKey, baseURL}); err != nil {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
 }
