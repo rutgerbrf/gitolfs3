@@ -372,7 +372,16 @@ func (h *handler) handlePutObject(w http.ResponseWriter, r *http.Request, repo, 
 		SendContentMd5: true,
 	})
 	if err != nil {
-		makeRespError(ctx, w, "Failed to upload object", http.StatusInternalServerError)
+		if errors.Is(err, errBadSum) {
+			makeRespError(ctx, w, "Bad checksum (OID does not match contents)", http.StatusBadRequest)
+		} else if errors.Is(err, errTooSmall) {
+			makeRespError(ctx, w, "Uploaded object smaller than expected", http.StatusBadRequest)
+		} else if errors.Is(err, errTooBig) {
+			makeRespError(ctx, w, "Uploaded object bigger than expected", http.StatusBadRequest)
+		} else {
+			reqlog(ctx, "Failed to upload object: %s", err)
+			makeRespError(ctx, w, "Failed to upload object", http.StatusInternalServerError)
+		}
 		return
 	}
 }
