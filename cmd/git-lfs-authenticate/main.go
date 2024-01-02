@@ -89,6 +89,7 @@ func getGitoliteAccess(logger *logger, reqID, path, user, gitolitePerm string) b
 }
 
 type gitolfs3Claims struct {
+	Type       string `json:"type"`
 	Repository string `json:"repository"`
 	Permission string `json:"permission"`
 }
@@ -190,6 +191,7 @@ func main() {
 	expiresIn := time.Hour * 24
 	claims := customClaims{
 		Gitolfs3: gitolfs3Claims{
+			Type:       "batch-api",
 			Repository: repo,
 			Permission: operation,
 		},
