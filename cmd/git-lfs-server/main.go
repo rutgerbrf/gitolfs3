@@ -13,8 +13,8 @@ import (
 	"hash"
 	"io"
 	"mime"
+	"net"
 	"net/http"
-	"net/http/cgi"
 	"net/url"
 	"os"
 	"os/exec"
@@ -699,6 +699,10 @@ func main() {
 	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
 	gitolitePath := os.Getenv("GITOLITE_PATH")
 	baseURLStr := os.Getenv("BASE_URL")
+	listenHost := os.Getenv("LISTEN_HOST")
+	listenPort := os.Getenv("LISTEN_PORT")
+
+	listenAddr := net.JoinHostPort(listenHost, listenPort)
 
 	if gitolitePath == "" {
 		gitolitePath = "gitolite"
@@ -709,6 +713,9 @@ func main() {
 	}
 	if privateKeyPath == "" {
 		die("Fatal: expected environment variable GITOLFS3_PRIVATE_KEY_PATH to be set")
+	}
+	if listenPort == "" {
+		die("Fatal: expected environment variable LISTEN_PORT to be set")
 	}
 	if baseURLStr == "" {
 		die("Fatal: expected environment variable BASE_URL to be set")
@@ -752,7 +759,8 @@ func main() {
 		die("Fatal: failed to create S3 client: %s", err)
 	}
 
-	if err = cgi.Serve(&handler{mc, bucket, anonUser, gitolitePath, privateKey, baseURL}); err != nil {
+	h := &handler{mc, bucket, anonUser, gitolitePath, privateKey, baseURL}
+	if err = http.ListenAndServe(listenAddr, h); err != nil {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
 }
