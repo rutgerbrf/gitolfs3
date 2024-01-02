@@ -21,7 +21,7 @@
           gitolfs3 = pkgs.buildGoModule {
             name = "gitolfs3";
             src = ./.;
-            vendorHash = null;
+            vendorHash = "sha256-3JfeOHbqcgv4D3r/W4FwrXRs1raiQeOxifhO7qH5Wnc=";
           };
         in
         {
