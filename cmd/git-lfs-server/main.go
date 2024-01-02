@@ -92,12 +92,13 @@ type batchResponse struct {
 }
 
 type handler struct {
-	mc           *minio.Client
-	bucket       string
-	anonUser     string
-	gitolitePath string
-	privateKey   ed25519.PrivateKey
-	baseURL      *url.URL
+	mc                      *minio.Client
+	bucket                  string
+	anonUser                string
+	gitolitePath            string
+	privateKey              ed25519.PrivateKey
+	baseURL                 *url.URL
+	exportAllForwardedHosts []string
 }
 
 func isValidSHA256Hash(hash string) bool {
@@ -566,6 +567,16 @@ func (h *handler) authorizeBatchAPI(w http.ResponseWriter, r *http.Request, or o
 	user := h.anonUser
 	ctx := r.Context()
 
+	if or.operation == operationDownload {
+		// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
+		forwardedHost := r.Header.Get("X-Forwarded-Host")
+		if forwardedHost != "" && slices.Contains(h.exportAllForwardedHosts, forwardedHost) {
+			// This is a forwarded host for which all repositories are exported,
+			// regardless of ownership configuration in Gitolite.
+			return true
+		}
+	}
+
 	if authz := r.Header.Get("Authorization"); authz != "" {
 		if !strings.HasPrefix(authz, "Bearer ") {
 			makeRespError(ctx, w, "Invalid Authorization header", http.StatusBadRequest)
@@ -821,8 +832,10 @@ func main() {
 	baseURLStr := os.Getenv("BASE_URL")
 	listenHost := os.Getenv("LISTEN_HOST")
 	listenPort := os.Getenv("LISTEN_PORT")
+	exportAllForwardedHostsStr := os.Getenv("EXPORT_ALL_FORWARDED_HOSTS")
 
 	listenAddr := net.JoinHostPort(listenHost, listenPort)
+	exportAllForwardedHosts := strings.Split(exportAllForwardedHostsStr, ",")
 
 	if gitolitePath == "" {
 		gitolitePath = "gitolite"
@@ -879,7 +892,7 @@ func main() {
 		die("Fatal: failed to create S3 client: %s", err)
 	}
 
-	h := &handler{mc, bucket, anonUser, gitolitePath, privateKey, baseURL}
+	h := &handler{mc, bucket, anonUser, gitolitePath, privateKey, baseURL, exportAllForwardedHosts}
 	if err = http.ListenAndServe(listenAddr, h); err != nil {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
