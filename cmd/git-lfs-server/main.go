@@ -484,11 +484,13 @@ func (h *handler) handleGetObject(w http.ResponseWriter, r *http.Request, repo, 
 	if err != nil {
 		reqlog(ctx, "Failed to stat: %s", err)
 		makeRespError(ctx, w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	if stat.Size != claims.Gitolfs3.Size {
 		reqlog(ctx, "Claims size does not match S3 object size")
 		makeRespError(ctx, w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Length", strconv.FormatInt(claims.Gitolfs3.Size, 10))
