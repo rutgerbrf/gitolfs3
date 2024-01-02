@@ -490,6 +490,9 @@ func (h *handler) handleGetObject(w http.ResponseWriter, r *http.Request, repo, 
 		makeRespError(ctx, w, "Internal server error", http.StatusInternalServerError)
 	}
 
+	w.Header().Set("Content-Length", strconv.FormatInt(claims.Gitolfs3.Size, 10))
+	w.WriteHeader(http.StatusOK)
+
 	vr := newValidatingReader(claims.Gitolfs3.Size, sha256Raw, obj)
 	_, err = io.Copy(w, vr)
 	if errors.Is(err, errBadSum) {
