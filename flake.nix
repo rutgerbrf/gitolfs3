@@ -5,12 +5,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, ... }@inputs:
-    {
-      nixosModules = rec {
-        gitolfs3 = import ./module self;
-        default = gitolfs3;
-      };
-    } // flake-utils.lib.eachDefaultSystem
+    flake-utils.lib.eachDefaultSystem
       (system:
         let
           pkgs = import nixpkgs {
