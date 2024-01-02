@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -588,7 +589,15 @@ func (h *handler) handleBatchAPI(w http.ResponseWriter, r *http.Request, repo st
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := context.WithValue(r.Context(), requestIDKey, xid.New().String())
+	reqID := xid.New().String()
+	ctx := context.WithValue(r.Context(), requestIDKey, reqID)
+	w.Header().Set("X-Request-Id", reqID)
+
+	defer func() {
+		if r := recover(); r != nil {
+			reqlog(ctx, "Panic when serving request: %s", debug.Stack())
+		}
+	}()
 
 	reqPath := os.Getenv("PATH_INFO")
 	if reqPath == "" {
