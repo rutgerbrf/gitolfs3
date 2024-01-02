@@ -606,20 +606,19 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
 
 	if submatches := reBatchAPI.FindStringSubmatch(reqPath); len(submatches) == 2 {
-		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
-		reqlog(ctx, "Repository: %s", repo)
-
 		if r.Method != http.MethodPost {
 			makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
+		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
+		reqlog(ctx, "Handling batch API request for repository: %s", repo)
 
 		h.handleBatchAPI(w, r.WithContext(ctx), repo)
 		return
 	}
 
 	if submatches := reObjUpload.FindStringSubmatch(reqPath); len(submatches) == 5 {
-		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
 		oid0, oid1, oid := submatches[2], submatches[3], submatches[4]
 
 		if !isValidSHA256Hash(oid) {
@@ -629,7 +628,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			makeRespError(ctx, w, "Bad URL format: malformed OID pattern", http.StatusBadRequest)
 			return
 		}
-		reqlog(ctx, "Repository: %s; OID: %s", repo, oid)
+
+		repo := strings.TrimPrefix(path.Clean(submatches[1]), "/")
+		reqlog(ctx, "Handling object PUT for repository: %s, OID: %s", repo, oid)
 
 		if r.Method != http.MethodPut {
 			makeRespError(ctx, w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -644,7 +645,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func reqlog(ctx context.Context, msg string, args ...any) {
-	fmt.Fprint(os.Stderr, "[gitolfs3] ")
 	if val := ctx.Value(requestIDKey); val != nil {
 		fmt.Fprintf(os.Stderr, "[%s] ", val.(string))
 	}
@@ -653,7 +653,6 @@ func reqlog(ctx context.Context, msg string, args ...any) {
 }
 
 func log(msg string, args ...any) {
-	fmt.Fprint(os.Stderr, "[gitolfs3] ")
 	fmt.Fprintf(os.Stderr, msg, args...)
 	fmt.Fprint(os.Stderr, "\n")
 }
