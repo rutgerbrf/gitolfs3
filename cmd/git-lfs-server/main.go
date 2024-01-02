@@ -150,7 +150,6 @@ func sha256AsBase64(hash string) string {
 
 func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj parsedBatchObject) batchResponseObject {
 	fullPath := path.Join(repo+".git", "lfs/objects", obj.firstByte, obj.secondByte, obj.fullHash)
-	expiresIn := time.Hour * 24
 
 	info, err := h.mc.StatObject(ctx, h.bucket, fullPath, minio.StatObjectOptions{Checksum: true})
 	if err != nil {
@@ -170,6 +169,7 @@ func (h *handler) handleDownloadObject(ctx context.Context, repo string, obj par
 		return makeObjError(obj, "Incorrect size specified for object or object currupted", http.StatusUnprocessableEntity)
 	}
 
+	expiresIn := time.Minute * 10
 	claims := handleObjectCustomClaims{
 		Gitolfs3: handleObjectGitolfs3Claims{
 			Type:       "basic-transfer",
@@ -242,7 +242,7 @@ func (h *handler) handleUploadObject(ctx context.Context, repo string, obj parse
 		return &objErr
 	}
 
-	expiresIn := time.Hour * 24
+	expiresIn := time.Minute * 10
 	claims := handleObjectCustomClaims{
 		Gitolfs3: handleObjectGitolfs3Claims{
 			Type:       "basic-transfer",

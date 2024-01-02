@@ -180,7 +180,7 @@ func main() {
 		die("forbidden")
 	}
 
-	expiresIn := time.Hour * 24
+	expiresIn := time.Minute * 5
 	claims := customClaims{
 		Gitolfs3: gitolfs3Claims{
 			Type:       "batch-api",
