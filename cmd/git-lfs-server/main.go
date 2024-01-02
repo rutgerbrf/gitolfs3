@@ -730,11 +730,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	reqPath := os.Getenv("PATH_INFO")
-	if reqPath == "" {
-		reqPath = r.URL.Path
-	}
-	reqPath = strings.TrimPrefix(path.Clean(reqPath), "/")
+	reqPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 
 	if submatches := reBatchAPI.FindStringSubmatch(reqPath); len(submatches) == 2 {
 		if r.Method != http.MethodPost {
@@ -824,17 +820,17 @@ func wipe(b []byte) {
 }
 
 func main() {
-	anonUser := os.Getenv("ANON_USER")
+	anonUser := os.Getenv("GITOLFS3_ANON_USER")
 	privateKeyPath := os.Getenv("GITOLFS3_PRIVATE_KEY_PATH")
-	endpoint := os.Getenv("S3_ENDPOINT")
-	bucket := os.Getenv("S3_BUCKET")
-	accessKeyIDFile := os.Getenv("S3_ACCESS_KEY_ID_FILE")
-	secretAccessKeyFile := os.Getenv("S3_SECRET_ACCESS_KEY_FILE")
-	gitolitePath := os.Getenv("GITOLITE_PATH")
-	baseURLStr := os.Getenv("BASE_URL")
-	listenHost := os.Getenv("LISTEN_HOST")
-	listenPort := os.Getenv("LISTEN_PORT")
-	exportAllForwardedHostsStr := os.Getenv("EXPORT_ALL_FORWARDED_HOSTS")
+	endpoint := os.Getenv("GITOLFS3_S3_ENDPOINT")
+	bucket := os.Getenv("GITOLFS3_S3_BUCKET")
+	accessKeyIDFile := os.Getenv("GITOLFS3_S3_ACCESS_KEY_ID_FILE")
+	secretAccessKeyFile := os.Getenv("GITOLFS3_S3_SECRET_ACCESS_KEY_FILE")
+	gitolitePath := os.Getenv("GITOLFS3_GITOLITE_PATH")
+	baseURLStr := os.Getenv("GITOLFS3_BASE_URL")
+	listenHost := os.Getenv("GITOLFS3_LISTEN_HOST")
+	listenPort := os.Getenv("GITOLFS3_LISTEN_PORT")
+	exportAllForwardedHostsStr := os.Getenv("GITOLFS3_EXPORT_ALL_FORWARDED_HOSTS")
 
 	listenAddr := net.JoinHostPort(listenHost, listenPort)
 	exportAllForwardedHosts := strings.Split(exportAllForwardedHostsStr, ",")
@@ -844,29 +840,29 @@ func main() {
 	}
 
 	if anonUser == "" {
-		die("Fatal: expected environment variable ANON_USER to be set")
+		die("Fatal: expected environment variable GITOLFS3_ANON_USER to be set")
 	}
 	if privateKeyPath == "" {
 		die("Fatal: expected environment variable GITOLFS3_PRIVATE_KEY_PATH to be set")
 	}
 	if listenPort == "" {
-		die("Fatal: expected environment variable LISTEN_PORT to be set")
+		die("Fatal: expected environment variable GITOLFS3_LISTEN_PORT to be set")
 	}
 	if baseURLStr == "" {
-		die("Fatal: expected environment variable BASE_URL to be set")
+		die("Fatal: expected environment variable GITOLFS3_BASE_URL to be set")
 	}
 	if endpoint == "" {
-		die("Fatal: expected environment variable S3_ENDPOINT to be set")
+		die("Fatal: expected environment variable GITOLFS3_S3_ENDPOINT to be set")
 	}
 	if bucket == "" {
-		die("Fatal: expected environment variable S3_BUCKET to be set")
+		die("Fatal: expected environment variable GITOLFS3_S3_BUCKET to be set")
 	}
 
 	if accessKeyIDFile == "" {
-		die("Fatal: expected environment variable S3_ACCESS_KEY_ID_FILE to be set")
+		die("Fatal: expected environment variable GITOLFS3_S3_ACCESS_KEY_ID_FILE to be set")
 	}
 	if secretAccessKeyFile == "" {
-		die("Fatal: expected environment variable S3_SECRET_ACCESS_KEY_FILE to be set")
+		die("Fatal: expected environment variable GITOLFS3_S3_SECRET_ACCESS_KEY_FILE to be set")
 	}
 
 	accessKeyID, err := os.ReadFile(accessKeyIDFile)
@@ -899,11 +895,3 @@ func main() {
 		die("Fatal: failed to serve CGI: %s", err)
 	}
 }
-
-// Directory stucture:
-// - lfs/
-//   - locks/
-//   - objects/
-//     - <1st OID byte>
-//       - <2nd OID byte>
-//         - <OID hash> <- this is the object
