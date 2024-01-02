@@ -618,7 +618,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.handleBatchAPI(w, r.WithContext(ctx), repo)
+		h.handlePutObject(w, r.WithContext(ctx), repo, oid)
 		return
 	}
 
