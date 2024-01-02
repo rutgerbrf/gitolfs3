@@ -13,8 +13,6 @@ import (
 	"os/exec"
 	"path"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,9 +22,7 @@ import (
 type logger struct {
 	reqID string
 	time  time.Time
-	m     sync.Mutex
-	// Contained value must implement io.WriteCloser
-	wc atomic.Value
+	wc    io.WriteCloser
 }
 
 func newLogger(reqID string) *logger {
@@ -34,21 +30,13 @@ func newLogger(reqID string) *logger {
 }
 
 func (l *logger) writer() io.WriteCloser {
-	w := l.wc.Load()
-	if w == nil {
-		l.m.Lock()
-		if l.wc.Load() == nil {
-			os.MkdirAll(".gitolfs3/logs/", 0o700) // Mode: drwx------
-			ts := l.time.Format("2006-01-02")
-			path := fmt.Sprintf(".gitolfs3/logs/gitolfs3-%s-%s.log", ts, l.reqID)
-			var err error
-			if w, err = os.Create(path); err == nil {
-				l.wc.Store(w)
-			}
-		}
-		l.m.Unlock()
+	if l.wc == nil {
+		os.MkdirAll(".gitolfs3/logs/", 0o700) // Mode: drwx------
+		ts := l.time.Format("2006-01-02")
+		path := fmt.Sprintf(".gitolfs3/logs/gitolfs3-%s-%s.log", ts, l.reqID)
+		l.wc, _ = os.Create(path)
 	}
-	return w.(io.WriteCloser)
+	return l.wc
 }
 
 func (l *logger) logf(msg string, args ...any) {
@@ -56,8 +44,8 @@ func (l *logger) logf(msg string, args ...any) {
 }
 
 func (l *logger) close() {
-	if wc := l.wc.Load(); wc != nil {
-		wc.(io.Closer).Close()
+	if l.wc != nil {
+		l.wc.Close()
 	}
 }
 
