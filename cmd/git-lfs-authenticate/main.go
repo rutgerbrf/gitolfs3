@@ -106,6 +106,8 @@ func wipe(b []byte) {
 	}
 }
 
+const usage = "Usage: git-lfs-authenticate <REPO> <OPERATION (upload/download)>"
+
 func main() {
 	// Even though not explicitly described in the Git LFS documentation, the
 	// git-lfs-authenticate command is expected to either exit succesfully with
@@ -118,13 +120,13 @@ func main() {
 	logger := newLogger(reqID)
 
 	if len(os.Args) != 3 {
-		die("expected 2 arguments (path, operation), got %d", len(os.Args)-1)
+		die(usage)
 	}
 
 	repo := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
 	operation := os.Args[2]
 	if operation != "download" && operation != "upload" {
-		die("expected operation to be upload or download, got %s", operation)
+		die(usage)
 	}
 
 	repoHRefBaseStr := os.Getenv("REPO_HREF_BASE")
