@@ -120,13 +120,15 @@ func main() {
 	logger := newLogger(reqID)
 
 	if len(os.Args) != 3 {
-		die(usage)
+		fmt.Println(usage)
+		os.Exit(1)
 	}
 
 	repo := strings.TrimPrefix(strings.TrimSuffix(os.Args[1], ".git"), "/")
 	operation := os.Args[2]
 	if operation != "download" && operation != "upload" {
-		die(usage)
+		fmt.Println(usage)
+		os.Exit(1)
 	}
 
 	repoHRefBaseStr := os.Getenv("REPO_HREF_BASE")
