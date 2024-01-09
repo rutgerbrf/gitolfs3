@@ -59,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	repo := strings.TrimPrefix(path.Clean(strings.TrimSuffix(os.Args[1], ".git")), "/")
+	repo := strings.TrimPrefix(path.Clean(os.Args[1]), "/")
 	operation := os.Args[2]
 	if operation != "download" && operation != "upload" {
 		fmt.Println(usage)
@@ -68,8 +68,11 @@ func main() {
 	if repo == ".." || strings.HasPrefix(repo, "../") {
 		die("highly illegal repo name (Anzeige ist raus)")
 	}
+	if !strings.HasSuffix(repo, ".git") {
+		die("expected repo name to have '.git' suffix")
+	}
 
-	repoDir := path.Join(repo + ".git")
+	repoDir := path.Join(repo)
 	finfo, err := os.Stat(repoDir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -125,12 +128,12 @@ func main() {
 
 	response := authenticateResponse{
 		Header: map[string]string{
-			"Authorization": "Tag " + tagStr,
+			"Authorization": "Gitolfs3-Hmac-Sha256 " + tagStr,
 		},
 		ExpiresIn: int64(expiresIn.Seconds()),
 		HRef: fmt.Sprintf("%s%s?p=1&te=%d",
 			hrefBase,
-			path.Join(repo+".git", "/info/lfs"),
+			path.Join(repo, "/info/lfs"),
 			expiresAtUnix,
 		),
 	}

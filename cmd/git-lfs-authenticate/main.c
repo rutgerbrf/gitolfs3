@@ -62,15 +62,15 @@ void printescjson(const char *str) {
 void checkrepopath(const char *path) {
 	if (strstr(path, "//") || strstr(path, "/./") || strstr(path, "/../")
 	 || hasprefix(path, "./") || hasprefix(path, "../") || hasprefix(path, "/../"))
-		die("Bad repository name: is unresolved path");
+		die("Bad repository name: Is unresolved path");
 	if (strlen(path) > 100)
-		die("Bad repository name: longer than 100 characters");
+		die("Bad repository name: Longer than 100 characters");
 	if (hassuffix(path, "/"))
-		die("Bad repositry name: unexpected trailing slash");
+		die("Bad repositry name: Unexpected trailing slash");
 	if (hasprefix(path, "/"))
-		die("Bad repository name: unexpected absolute path");
+		die("Bad repository name: Unexpected absolute path");
 	if (!hassuffix(path, ".git"))
-		die("Bad repository name: expected '.git' repo path suffix");
+		die("Bad repository name: Expected '.git' repo path suffix");
 
 	struct stat statbuf;
 	if (stat(path, &statbuf)) {
@@ -203,8 +203,8 @@ void makehextag(const taginfo_t info, uint8_t key[KEYSIZE], char dest[MAX_HEXTAG
 	memset(dest, 0, MAX_HEXTAG_STRLEN + 1);
 	for (size_t i = 0; i < rawtag_len; i++) {
 		uint8_t b = rawtag[i];
-		dest[i] = (b >> 4) + ((b >> 4) < 10 ? '0' : 'a');
-		dest[i + 1] = (b & 0x0F) + ((b & 0x0F) < 10 ? '0' : 'a');
+		dest[i * 2] = (b >> 4) + ((b >> 4) < 10 ? '0' : 'a');
+		dest[i*2 + 1] = (b & 0x0F) + ((b & 0x0F) < 10 ? '0' : 'a');
 	}
 }
 
@@ -223,14 +223,14 @@ int main(int argc, char *argv[]) {
 	checkrepopath(repopath);
 
 	const char *hrefbase = getenv("GITOLFS3_HREF_BASE");
-	const char *keypath = getenv("GITOLFS3_KEY_PATH");
+	const char *keypath  = getenv("GITOLFS3_KEY_PATH");
 	
 	if (!hrefbase || strlen(hrefbase) == 0)
-		die("Incomplete configuration: base URL not provided");
+		die("Incomplete configuration: Base URL not provided");
 	if (hrefbase[strlen(hrefbase) - 1] != '/')
-		die("Bad configuration: base URL should end with slash");
+		die("Bad configuration: Base URL should end with slash");
 	if (!keypath || strlen(keypath) == 0)
-		die("Incomplete configuration: key path not provided");
+		die("Incomplete configuration: Key path not provided");
 
 	uint8_t key[64];
 	readkey(keypath, key);
