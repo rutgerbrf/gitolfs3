@@ -65,8 +65,6 @@ void checkrepopath(const char *path) {
 		die("Bad repository name: Is unresolved path");
 	if (strlen(path) > 100)
 		die("Bad repository name: Longer than 100 characters");
-	if (hassuffix(path, "/"))
-		die("Bad repositry name: Unexpected trailing slash");
 	if (hasprefix(path, "/"))
 		die("Bad repository name: Unexpected absolute path");
 	if (!hassuffix(path, ".git"))
@@ -152,6 +150,10 @@ void u64tobe(uint64_t x, uint8_t b[8]) {
 	b[7] = (uint8_t)(x >>  0);
 }
 
+void *memcat(void *dest, const void *src, size_t n) {
+	return memcpy(dest, src, n) + n;
+}
+
 #define MAX_TAG_SIZE EVP_MAX_MD_SIZE
 
 typedef struct taginfo {
@@ -160,10 +162,6 @@ typedef struct taginfo {
 	const char    *operation;
 	const int64_t  expiresat_s;
 } taginfo_t;
-
-void *memcat(void *dest, const void *src, size_t n) {
-	return memcpy(dest, src, n) + n;
-}
 
 void maketag(const taginfo_t info, uint8_t key[KEYSIZE], uint8_t dest[MAX_TAG_SIZE], uint32_t *len) {
 	uint8_t expiresat_b[8];
@@ -247,7 +245,8 @@ int main(int argc, char *argv[]) {
 	char hextag[MAX_HEXTAG_STRLEN + 1];
 	makehextag(taginfo, key, hextag);
 
-	printf("{\"header\":{\"Authorization\":\"Gitolfs3-Hmac-Sha256 %s\"},\"expires_in\":%ld,\"href\":\"", hextag, expiresin_s);
+	printf("{\"header\":{\"Authorization\":\"Gitolfs3-Hmac-Sha256 %s\"},"
+	       "\"expires_in\":%ld,\"href\":\"", hextag, expiresin_s);
 	printescjson(hrefbase);
 	printescjson(repopath);
 	printf("/info/lfs?p=1&te=%ld\"}\n", expiresat_s);

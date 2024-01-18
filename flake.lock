@@ -1,5 +1,24 @@
 {
   "nodes": {
+    "crane": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1701384536,
+        "narHash": "sha256-PdYjpXmkn4FYJU7uvmCa54b0PPXBgDZHJaJpSEWR1Ek=",
+        "rev": "07c531adf572dafd494db0672cdac00e48216171",
+        "revCount": 469,
+        "type": "tarball",
+        "url": "https://api.flakehub.com/f/pinned/ipetkov/crane/0.15.1/018c226e-9985-758b-9809-17419c4ebd2d/source.tar.gz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://flakehub.com/f/ipetkov/crane/0.15.1.tar.gz"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -33,6 +52,7 @@
     },
     "root": {
       "inputs": {
+        "crane": "crane",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs"
       }
