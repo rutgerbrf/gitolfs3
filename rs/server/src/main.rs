@@ -299,7 +299,7 @@ struct BatchResponseObjectAction {
     expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Default, Debug, Serialize, Clone)]
 struct BatchResponseObjectActions {
     #[serde(skip_serializing_if = "Option::is_none")]
     upload: Option<BatchResponseObjectAction>,
@@ -315,6 +315,7 @@ struct BatchResponseObject {
     size: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     authenticated: Option<bool>,
+    actions: BatchResponseObjectActions,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -342,7 +343,7 @@ fn validate_size(expected: i64, obj: &HeadObjectOutput) -> bool {
     true
 }
 
-async fn handle_download_object(state: &AppState, repo: &str, obj: &BatchRequestObject) {
+async fn handle_download_object(state: &AppState, repo: &str, obj: &BatchRequestObject, trusted: bool) -> BatchResponseObject {
     let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
     let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
 
@@ -354,16 +355,36 @@ async fn handle_download_object(state: &AppState, repo: &str, obj: &BatchRequest
         .checksum_mode(aws_sdk_s3::types::ChecksumMode::Enabled)
         .send()
         .await
-        .unwrap();
+        .unwrap(); // TODO: don't unwrap()
     // Scaleway actually doesn't provide SHA256 suport, but maybe in the future :)
     if !validate_checksum(obj.oid, &result) {
-        unreachable!();
+        todo!();
     }
     if !validate_size(obj.size, &result) {
-        unreachable!();
+        todo!();
     }
 
-    let expires_at = Utc::now() + Duration::seconds(5 * 60);
+    let expires_in = std::time::Duration::from_secs(5 * 60);
+    let expires_at = Utc::now() + expires_in;
+
+    if trusted {
+        let config = aws_sdk_s3::presigning::PresigningConfig::expires_in(expires_in).unwrap();
+        let presigned = state.s3_client.get_object().presigned(config).await.unwrap();
+        return BatchResponseObject{
+            oid: obj.oid,
+            size: obj.size,
+            authenticated: Some(true),
+            actions: BatchResponseObjectActions {
+                download: Some(BatchResponseObjectAction{
+                    header: presigned.headers().map(|(k, v)| (k.to_owned(), v.to_owned())).collect(),
+                    expires_at,
+                    href: presigned.uri().to_string(),
+                }),
+                ..Default::default()
+            }
+        };
+    }
+    todo!();
 }
 
 struct AuthorizationConfig {
@@ -496,7 +517,7 @@ async fn batch(
     let Some(public) = is_repo_public(&repo) else {
         return REPO_NOT_FOUND.into_response();
     };
-    let authn = match authorize(
+    let Trusted(trusted) = match authorize(
         &state.authz_conf,
         &headers,
         &repo,
@@ -528,7 +549,7 @@ async fn batch(
 
     let resp: BatchResponse;
     for obj in payload.objects {
-        handle_download_object(&state, &repo, &obj).await;
+        handle_download_object(&state, &repo, &obj, trusted).await;
         //        match payload.operation {
         //            Operation::Download => resp.objects.push(handle_download_object(repo, obj));,
         //            Operation::Upload => resp.objects.push(handle_upload_object(repo, obj)),
