@@ -195,7 +195,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let (repo_name, op) = match parse_cmdline() {
+    let (repo_name, operation) = match parse_cmdline() {
         Ok(args) => args,
         Err(e) => {
             eprintln!("Error: {e}\n");
@@ -210,15 +210,13 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let expires_in = Duration::from_secs(5 * 60);
-    let expires_at = Utc::now() + expires_in;
-
+    let expires_at = Utc::now() + Duration::from_secs(5 * 60);
     let Some(tag) = common::generate_tag(
         common::Claims {
             auth_type: common::AuthType::GitLfsAuthenticate,
             repo_path: &repo_name,
             expires_at,
-            operation: op,
+            operation,
         },
         key,
     ) else {
@@ -227,12 +225,12 @@ fn main() -> ExitCode {
     };
 
     println!(
-        "{{\"header\":{{\"Authorization\":\"Gitolfs3-Hmac-Sha256 {tag}\"}},\
-        \"expires_at\":\"{}\",\"href\":\"{}{}/info/lfs?p=1&te={}\"}}",
+        "{{\"header\":{{\"Authorization\":\"Gitolfs3-Hmac-Sha256 {tag} {}\"}},\
+        \"expires_at\":\"{}\",\"href\":\"{}{}/info/lfs\"}}",
+        expires_at.timestamp(),
         common::EscJsonFmt(&expires_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
         common::EscJsonFmt(&config.href_base),
         common::EscJsonFmt(&repo_name),
-        expires_at.timestamp()
     );
 
     ExitCode::SUCCESS

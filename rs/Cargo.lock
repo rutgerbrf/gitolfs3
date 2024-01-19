@@ -1882,6 +1882,7 @@ dependencies = [
  "common",
  "mime",
  "serde",
+ "serde_json",
  "tokio",
  "tower",
  "tower-service",
