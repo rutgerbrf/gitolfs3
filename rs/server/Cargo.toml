@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aws-config = { version = "1.1.2", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.12.0"
 axum = "0.7"
 aws-creds = "0.34"
+base64 = "0.21"
 chrono = { version = "0.4", features = ["serde"] }
 common = { path = "../common" }
 mime = "0.3"
-rust-s3 = "0.33"
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1.35", features = ["full"] }
+tower = "0.4"
 tower-service = "0.3"
