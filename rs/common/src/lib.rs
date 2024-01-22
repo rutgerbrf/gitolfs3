@@ -37,8 +37,9 @@ impl FromStr for Operation {
 }
 
 #[repr(u8)]
-pub enum AuthType {
-    GitLfsAuthenticate = 1,
+enum AuthType {
+    BatchApi = 1,
+    Download = 2,
 }
 
 /// None means out of range.
@@ -156,6 +157,12 @@ impl<const N: usize> SafeByteArray<N> {
     }
 }
 
+impl<const N: usize> Default for SafeByteArray<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const N: usize> AsRef<[u8]> for SafeByteArray<N> {
     fn as_ref(&self) -> &[u8] {
         &self.inner
@@ -184,10 +191,18 @@ impl<const N: usize> FromStr for SafeByteArray<N> {
     }
 }
 
+pub type Oid = Digest<32>;
+
+#[derive(Debug, Copy, Clone)]
+pub enum SpecificClaims {
+    BatchApi(Operation),
+    Download(Oid),
+}
+
+#[derive(Debug, Copy, Clone)]
 pub struct Claims<'a> {
-    pub auth_type: AuthType,
+    pub specific_claims: SpecificClaims,
     pub repo_path: &'a str,
-    pub operation: Operation,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -198,10 +213,18 @@ pub fn generate_tag(claims: Claims, key: impl AsRef<[u8]>) -> Option<Digest<32>>
     }
 
     let mut hmac = hmac_sha256::HMAC::new(key);
-    hmac.update([claims.auth_type as u8]);
+    match claims.specific_claims {
+        SpecificClaims::BatchApi(operation) => {
+            hmac.update([AuthType::BatchApi as u8]);
+            hmac.update([operation as u8]);
+        }
+        SpecificClaims::Download(oid) => {
+            hmac.update([AuthType::Download as u8]);
+            hmac.update(oid.as_bytes());
+        }
+    }
     hmac.update([claims.repo_path.len() as u8]);
     hmac.update(claims.repo_path.as_bytes());
-    hmac.update([claims.operation as u8]);
     hmac.update(claims.expires_at.timestamp().to_be_bytes());
     Some(hmac.finalize().into())
 }
@@ -280,9 +303,9 @@ impl<const N: usize> From<[u8; N]> for Digest<N> {
     }
 }
 
-impl<const N: usize> Into<[u8; N]> for Digest<N> {
-    fn into(self) -> [u8; N] {
-        self.inner
+impl<const N: usize> From<Digest<N>> for [u8; N] {
+    fn from(val: Digest<N>) -> Self {
+        val.inner
     }
 }
 
@@ -304,7 +327,7 @@ impl<const N: usize> ConstantTimeEq for Digest<N> {
 
 impl<const N: usize> PartialEq for Digest<N> {
     fn eq(&self, other: &Self) -> bool {
-        self.ct_eq(&other).into()
+        self.ct_eq(other).into()
     }
 }
 

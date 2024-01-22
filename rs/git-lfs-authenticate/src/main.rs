@@ -148,30 +148,30 @@ struct Config {
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum LoadConfigError {
-    BaseUrlMissing,
+    BaseUrlNotProvided,
     BaseUrlSlashSuffixMissing,
-    KeyPathMissing,
+    KeyPathNotProvided,
 }
 
 impl fmt::Display for LoadConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BaseUrlMissing => write!(f, "base URL not provided"),
+            Self::BaseUrlNotProvided => write!(f, "base URL not provided"),
             Self::BaseUrlSlashSuffixMissing => write!(f, "base URL does not end with slash"),
-            Self::KeyPathMissing => write!(f, "key path not provided"),
+            Self::KeyPathNotProvided => write!(f, "key path not provided"),
         }
     }
 }
 
 fn load_config() -> Result<Config, LoadConfigError> {
     let Ok(href_base) = std::env::var("GITOLFS3_HREF_BASE") else {
-        return Err(LoadConfigError::BaseUrlMissing);
+        return Err(LoadConfigError::BaseUrlNotProvided);
     };
     if !href_base.ends_with('/') {
         return Err(LoadConfigError::BaseUrlSlashSuffixMissing);
     }
     let Ok(key_path) = std::env::var("GITOLFS3_KEY_PATH") else {
-        return Err(LoadConfigError::KeyPathMissing);
+        return Err(LoadConfigError::KeyPathNotProvided);
     };
     Ok(Config {
         href_base,
@@ -213,10 +213,9 @@ fn main() -> ExitCode {
     let expires_at = Utc::now() + Duration::from_secs(5 * 60);
     let Some(tag) = common::generate_tag(
         common::Claims {
-            auth_type: common::AuthType::GitLfsAuthenticate,
+            specific_claims: common::SpecificClaims::BatchApi(operation),
             repo_path: &repo_name,
             expires_at,
-            operation,
         },
         key,
     ) else {
