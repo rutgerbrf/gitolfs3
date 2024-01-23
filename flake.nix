@@ -26,6 +26,8 @@
         {
           packages.gitolfs3 = gitolfs3;
           packages.gitolfs3-rs = craneLib.buildPackage {
+            pname = "gitolfs3";
+            version = "0.1.0";
             src = craneLib.cleanCargoSource (craneLib.path ./rs);
           };
           packages.default = self.packages.${system}.gitolfs3;

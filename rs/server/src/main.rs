@@ -122,7 +122,7 @@ fn require_env(name: &str) -> Result<String, String> {
 impl Env {
     fn load() -> Result<Env, String> {
         Ok(Env {
-            s3_secret_access_key: require_env("GITOLFS3_S3_ACCESS_KEY_FILE")?,
+            s3_secret_access_key: require_env("GITOLFS3_S3_SECRET_ACCESS_KEY_FILE")?,
             s3_access_key_id: require_env("GITOLFS3_S3_ACCESS_KEY_ID_FILE")?,
             s3_endpoint: require_env("GITOLFS3_S3_ENDPOINT")?,
             s3_bucket: require_env("GITOLFS3_S3_BUCKET")?,
