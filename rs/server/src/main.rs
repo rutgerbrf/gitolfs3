@@ -468,7 +468,8 @@ async fn handle_upload_object(
             }
         }
         Err(SdkError::ServiceError(e)) if e.err().is_not_found() => {}
-        _ => {
+        Err(e) => {
+            println!("Failed to HeadObject (repo {repo}, OID {}): {e}", obj.oid);
             return Some(BatchResponseObject::error(
                 obj,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -539,12 +540,13 @@ async fn handle_download_object(
         .await
     {
         Ok(result) => result,
-        Err(_) => {
+        Err(e) => {
+            println!("Failed to HeadObject (repo {repo}, OID {}): {e}", obj.oid);
             return BatchResponseObject::error(
                 obj,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to query object information".to_string(),
-            )
+            );
         }
     };
 
@@ -908,7 +910,8 @@ async fn obj_download(
         .await
     {
         Ok(result) => result,
-        Err(_) => {
+        Err(e) => {
+            println!("Failed to GetObject (repo {repo}, OID {oid}): {e}");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to query object information",
