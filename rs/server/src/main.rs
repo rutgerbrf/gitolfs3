@@ -116,7 +116,8 @@ struct Env {
 }
 
 fn require_env(name: &str) -> Result<String, String> {
-    std::env::var(name).map_err(|_| format!("environment variable {name} should be defined and valid"))
+    std::env::var(name)
+        .map_err(|_| format!("environment variable {name} should be defined and valid"))
 }
 
 impl Env {
@@ -130,7 +131,8 @@ impl Env {
             key_path: require_env("GITOLFS3_KEY_PATH")?,
             listen_host: require_env("GITOLFS3_LISTEN_HOST")?,
             listen_port: require_env("GITOLFS3_LISTEN_PORT")?,
-            trusted_forwarded_hosts: std::env::var("GITOLFS3_TRUSTED_FORWARDED_HOSTS").unwrap_or_default(),
+            trusted_forwarded_hosts: std::env::var("GITOLFS3_TRUSTED_FORWARDED_HOSTS")
+                .unwrap_or_default(),
         })
     }
 }
@@ -170,7 +172,7 @@ async fn main() -> ExitCode {
         Err(e) => {
             println!("Failed to create S3 client: {e}");
             return ExitCode::FAILURE;
-        },
+        }
     };
     let key = match common::load_key(&env.key_path) {
         Ok(key) => key,
@@ -180,7 +182,8 @@ async fn main() -> ExitCode {
         }
     };
 
-    let trusted_forwarded_hosts: HashSet<String> = env.trusted_forwarded_hosts
+    let trusted_forwarded_hosts: HashSet<String> = env
+        .trusted_forwarded_hosts
         .split(',')
         .map(|s| s.to_owned())
         .filter(|s| !s.is_empty())
