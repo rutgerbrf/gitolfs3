@@ -116,7 +116,7 @@ fn main() -> ExitCode {
 
     let mut args = Vec::new();
 
-    let git_cmds = ["receive-pack", "upload-archive", "upload-pack"];
+    let git_cmds = ["git-receive-pack", "git-upload-archive", "git-upload-pack"];
     if git_cmds.contains(&program.as_str()) {
         if cmd.len() != 1 {
             eprintln!("Bad command");
