@@ -56,7 +56,7 @@ fn parse_cmd(mut cmd: &str) -> Option<Vec<String>> {
     let mut args = Vec::<String>::new();
 
     cmd = cmd.trim_matches(is_posix_space);
-    while cmd != "" {
+    while !cmd.is_empty() {
         if cmd.starts_with('\'') {
             let (arg, remaining) = parse_sq(cmd)?;
             args.push(arg);
@@ -91,7 +91,7 @@ fn main() -> ExitCode {
         eprintln!("Missing argument for argument '-c'");
         return bad_usage;
     };
-    if args.next() != None {
+    if args.next().is_some() {
         eprintln!("Too many arguments passed");
         return bad_usage;
     }

@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "advisory-db": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1706115649,
+        "narHash": "sha256-Qrqb54qGaRsFdLDj8EJtI5leFGFfqWHLRgC+t6KWlpQ=",
+        "owner": "rustsec",
+        "repo": "advisory-db",
+        "rev": "1d2202ea2b32fabd3307641010301bfe187ef11a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rustsec",
+        "repo": "advisory-db",
+        "type": "github"
+      }
+    },
     "crane": {
       "inputs": {
         "nixpkgs": [
@@ -7,16 +23,16 @@
         ]
       },
       "locked": {
-        "lastModified": 1701384536,
-        "narHash": "sha256-PdYjpXmkn4FYJU7uvmCa54b0PPXBgDZHJaJpSEWR1Ek=",
-        "rev": "07c531adf572dafd494db0672cdac00e48216171",
-        "revCount": 469,
+        "lastModified": 1705625727,
+        "narHash": "sha256-naMq6+TNLpEiBBjc0XaCbMLYJxJXWTZz4JGSpYGgIOM=",
+        "rev": "8f515142e805dc377cf8edb0ff75d14a11307f89",
+        "revCount": 485,
         "type": "tarball",
-        "url": "https://api.flakehub.com/f/pinned/ipetkov/crane/0.15.1/018c226e-9985-758b-9809-17419c4ebd2d/source.tar.gz"
+        "url": "https://api.flakehub.com/f/pinned/ipetkov/crane/0.16.0/018d1f38-c6e9-7615-a492-9b554687ba26/source.tar.gz"
       },
       "original": {
         "type": "tarball",
-        "url": "https://flakehub.com/f/ipetkov/crane/0.15.1.tar.gz"
+        "url": "https://flakehub.com/f/ipetkov/crane/0.16.0.tar.gz"
       }
     },
     "flake-utils": {
@@ -24,26 +40,26 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1701680307,
-        "narHash": "sha256-kAuep2h5ajznlPMD9rnQyffWG8EM/C73lejGofXvdM8=",
-        "rev": "4022d587cbbfd70fe950c1e2083a02621806a725",
-        "revCount": 88,
+        "lastModified": 1705309234,
+        "narHash": "sha256-uNRRNRKmJyCRC/8y1RqBkqWBLM034y4qN7EprSdmgyA=",
+        "rev": "1ef2e671c3b0c19053962c07dbda38332dcebf26",
+        "revCount": 90,
         "type": "tarball",
-        "url": "https://api.flakehub.com/f/pinned/numtide/flake-utils/0.1.88%2Brev-4022d587cbbfd70fe950c1e2083a02621806a725/018c340d-3287-7c66-818b-f2f646a808e3/source.tar.gz"
+        "url": "https://api.flakehub.com/f/pinned/numtide/flake-utils/0.1.90%2Brev-1ef2e671c3b0c19053962c07dbda38332dcebf26/018d0c5a-ac7d-77f2-bef1-1527903ad3cc/source.tar.gz"
       },
       "original": {
         "type": "tarball",
-        "url": "https://flakehub.com/f/numtide/flake-utils/0.1.88.tar.gz"
+        "url": "https://flakehub.com/f/numtide/flake-utils/0.1.90.tar.gz"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1703467016,
-        "narHash": "sha256-/5A/dNPhbQx/Oa2d+Get174eNI3LERQ7u6WTWOlR1eQ=",
-        "rev": "d02d818f22c777aa4e854efc3242ec451e5d462a",
-        "revCount": 553579,
+        "lastModified": 1705916986,
+        "narHash": "sha256-iBpfltu6QvN4xMpen6jGGEb6jOqmmVQKUrXdOJ32u8w=",
+        "rev": "d7f206b723e42edb09d9d753020a84b3061a79d8",
+        "revCount": 554771,
         "type": "tarball",
-        "url": "https://api.flakehub.com/f/pinned/NixOS/nixpkgs/0.2311.553579%2Brev-d02d818f22c777aa4e854efc3242ec451e5d462a/018ca90b-a320-767a-a3c2-3cd4ab8c3551/source.tar.gz"
+        "url": "https://api.flakehub.com/f/pinned/NixOS/nixpkgs/0.2311.554771%2Brev-d7f206b723e42edb09d9d753020a84b3061a79d8/018d35d3-1b83-7e69-a58c-3fca76cb78bb/source.tar.gz"
       },
       "original": {
         "type": "tarball",
@@ -52,6 +68,7 @@
     },
     "root": {
       "inputs": {
+        "advisory-db": "advisory-db",
         "crane": "crane",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs"
