@@ -344,10 +344,11 @@ where
 {
     type Rejection = GitLfsJsonRejection;
 
-    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(mut req: Request, state: &S) -> Result<Self, Self::Rejection> {
         if !has_git_lfs_json_content_type(&req) {
             return Err(GitLfsJsonRejection::MissingGitLfsJsonContentType);
         }
+        req.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
         Json::<T>::from_request(req, state)
             .await
             .map(GitLfsJson)
