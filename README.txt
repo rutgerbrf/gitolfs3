@@ -1,8 +1,7 @@
 gitolfs3
 ========
 
-Yes, this is indeed an integration between Gitolite, Git LFS and Scaleway
-Object Storage.
+Yes, this is indeed an integration between Git LFS and Scaleway Object Storage.
 
 To be honest, the code is pretty bad right now and solely serves my needs.
 Although I will be doing some cleanups, I have no interest in making this
