@@ -149,6 +149,7 @@ fn get_s3_client(env: &Env) -> Result<aws_sdk_s3::Client, std::io::Error> {
         "gitolfs3-env",
     );
     let config = aws_config::SdkConfig::builder()
+        .behavior_version(aws_config::BehaviorVersion::latest())
         .endpoint_url(&env.s3_endpoint)
         .credentials_provider(aws_sdk_s3::config::SharedCredentialsProvider::new(
             credentials,
