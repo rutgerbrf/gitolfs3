@@ -279,7 +279,7 @@ struct BatchRequest {
     hash_algo: HashAlgo,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct GitLfsJson<T>(Json<T>);
 
 const LFS_MIME: &str = "application/vnd.git-lfs+json";
@@ -306,18 +306,6 @@ fn is_git_lfs_json_mimetype(mimetype: &str) -> bool {
     let Ok(mime) = mimetype.parse::<mime::Mime>() else {
         return false;
     };
-    println!(
-        "MIME type: {:?}; type: {}, subtype: {}, suffix: {}, charset: {}",
-        mime,
-        mime.type_(),
-        mime.subtype(),
-        mime.suffix()
-            .map(|name| name.to_string())
-            .unwrap_or("<no suffix>".to_string()),
-        mime.get_param(mime::CHARSET)
-            .map(|name| name.to_string())
-            .unwrap_or("<no charset>".to_string())
-    );
     if mime.type_() != mime::APPLICATION
         || mime.subtype() != "vnd.git-lfs"
         || mime.suffix() != Some(mime::JSON)
@@ -371,7 +359,7 @@ impl<T: Serialize> IntoResponse for GitLfsJson<T> {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct GitLfsErrorData<'a> {
     message: &'a str,
 }
@@ -841,7 +829,6 @@ pub struct VerifyClaimsInput<'a> {
     pub repo_path: &'a str,
 }
 
-// Note: expires_at is ignored.
 fn verify_claims(
     conf: &AuthorizationConfig,
     claims: &VerifyClaimsInput,
@@ -991,4 +978,32 @@ fn test_deserialize() {
         serde_json::from_str::<BatchRequest>(json).unwrap(),
         expected
     );
+}
+
+#[test]
+fn test_validate_claims() {
+    let key = "00232f7a019bd34e3921ee6c5f04caf48a4489d1be5d1999038950a7054e0bfea369ce2becc0f13fd3c69f8af2384a25b7ac2d52eb52c33722f3c00c50d4c9c2";
+    let key: common::Key = key.parse().unwrap();
+
+    let expires_at = Utc::now() + std::time::Duration::from_secs(5 * 60);
+    let claims = common::Claims {
+        expires_at,
+        repo_path: "lfs-test.git",
+        specific_claims: common::SpecificClaims::BatchApi(common::Operation::Download),
+    };
+    let tag = common::generate_tag(claims, &key).unwrap();
+    let header_value = format!("Gitolfs3-Hmac-Sha256 {tag} {}", expires_at.timestamp());
+
+    let conf = AuthorizationConfig {
+        key,
+        trusted_forwarded_hosts: HashSet::new(),
+    };
+    let claims = VerifyClaimsInput {
+        repo_path: "lfs-test.git",
+        specific_claims: common::SpecificClaims::BatchApi(common::Operation::Download),
+    };
+    let mut headers = HeaderMap::new();
+    headers.insert(header::AUTHORIZATION, header_value.try_into().unwrap());
+
+    assert!(verify_claims(&conf, &claims, &headers).unwrap());
 }

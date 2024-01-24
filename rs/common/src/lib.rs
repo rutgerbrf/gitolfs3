@@ -136,9 +136,9 @@ fn parse_hex_exact(value: &str, buf: &mut [u8]) -> Result<(), ParseHexError> {
     for (i, c) in value.bytes().enumerate() {
         if let Some(b) = decode_nibble(c) {
             if i % 2 == 0 {
-                buf[i / 2] |= b;
+                buf[i / 2] |= b << 4;
             } else {
-                buf[i / 2] = b << 4;
+                buf[i / 2] |= b;
             }
         } else {
             return Err(ParseHexError::InvalidCharacter);
@@ -236,8 +236,16 @@ impl<B: AsRef<[u8]>> fmt::Display for HexFmt<B> {
         let HexFmt(buf) = self;
         for b in buf.as_ref() {
             let (high, low) = (b >> 4, b & 0xF);
-            let highc = if high < 10 { b'0' + high } else { b'a' + high };
-            let lowc = if low < 10 { b'0' + low } else { b'a' + low };
+            let highc = if high < 10 {
+                high + b'0'
+            } else {
+                high - 10 + b'a'
+            };
+            let lowc = if low < 10 {
+                low + b'0'
+            } else {
+                low - 10 + b'a'
+            };
             f.write_char(highc as char)?;
             f.write_char(lowc as char)?;
         }
