@@ -1633,6 +1633,7 @@ dependencies = [
  "common",
  "mime",
  "serde",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tower",

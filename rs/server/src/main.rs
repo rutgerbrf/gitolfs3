@@ -236,12 +236,16 @@ async fn main() -> ExitCode {
 enum TransferAdapter {
     #[serde(rename = "basic")]
     Basic,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
 enum HashAlgo {
     #[serde(rename = "sha256")]
     Sha256,
+    #[serde(other)]
+    Unknown,
 }
 
 impl Default for HashAlgo {
@@ -250,7 +254,7 @@ impl Default for HashAlgo {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 struct BatchRequestObject {
     oid: common::Oid,
     size: i64,
@@ -265,7 +269,7 @@ fn default_transfers() -> Vec<TransferAdapter> {
     vec![TransferAdapter::Basic]
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 struct BatchRequest {
     operation: common::Operation,
     #[serde(default = "default_transfers")]
@@ -344,11 +348,10 @@ where
 {
     type Rejection = GitLfsJsonRejection;
 
-    async fn from_request(mut req: Request, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         if !has_git_lfs_json_content_type(&req) {
             return Err(GitLfsJsonRejection::MissingGitLfsJsonContentType);
         }
-        req.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
         Json::<T>::from_request(req, state)
             .await
             .map(GitLfsJson)
@@ -963,4 +966,29 @@ fn test_mimetype() {
     assert!(!is_git_lfs_json_mimetype(
         "application/vnd.git-lfs+json; charset=ISO-8859-1"
     ));
+}
+
+#[test]
+fn test_deserialize() {
+    let json = r#"{"operation":"upload","objects":[{"oid":"8f4123f9a7181f488c5e111d82cefd992e461ae5df01fd2254399e6e670b2d3c","size":170904}],
+                   "transfers":["lfs-standalone-file","basic","ssh"],"ref":{"name":"refs/heads/main"},"hash_algo":"sha256"}"#;
+    let expected = BatchRequest {
+        operation: common::Operation::Upload,
+        objects: vec![BatchRequestObject {
+            oid: "8f4123f9a7181f488c5e111d82cefd992e461ae5df01fd2254399e6e670b2d3c"
+                .parse()
+                .unwrap(),
+            size: 170904,
+        }],
+        transfers: vec![
+            TransferAdapter::Unknown,
+            TransferAdapter::Basic,
+            TransferAdapter::Unknown,
+        ],
+        hash_algo: HashAlgo::Sha256,
+    };
+    assert_eq!(
+        serde_json::from_str::<BatchRequest>(json).unwrap(),
+        expected
+    );
 }
