@@ -1,9 +1,7 @@
 .direnv/
 .idea/
 .vscode/
-
-# go build
-cmd/git-lfs-authenticate/git-lfs-authenticate
-cmd/git-lfs-server/git-lfs-server
 # nix build
 /result
+# cargo build
+/target/

@@ -17,19 +17,14 @@
 
           craneLib = crane.lib.${system};
 
-          gitolfs3 = pkgs.buildGoModule {
-            name = "gitolfs3";
-            src = ./.;
-            vendorHash = "sha256-3JfeOHbqcgv4D3r/W4FwrXRs1raiQeOxifhO7qH5Wnc=";
+          gitolfs3 = craneLib.buildPackage {
+            pname = "gitolfs3";
+            version = "0.1.0";
+            src = craneLib.cleanCargoSource (craneLib.path ./.);
           };
         in
         {
           packages.gitolfs3 = gitolfs3;
-          packages.gitolfs3-rs = craneLib.buildPackage {
-            pname = "gitolfs3";
-            version = "0.1.0";
-            src = craneLib.cleanCargoSource (craneLib.path ./rs);
-          };
           packages.default = self.packages.${system}.gitolfs3;
 
           devShells.default = pkgs.mkShell {
