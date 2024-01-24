@@ -1023,7 +1023,10 @@ impl DownloadLimiter {
                 return DownloadLimiter { current: 0, limit };
             }
         };
-        let current: u64 = match dlimit_str.parse().map_err(tokio::io::Error::other) {
+        let current: u64 = match dlimit_str
+            .parse()
+            .map_err(|e| tokio::io::Error::new(tokio::io::ErrorKind::InvalidData, e))
+        {
             Ok(current) => current,
             Err(e) => {
                 println!("Failed to read download counter, assuming 0: {e}");
