@@ -514,7 +514,7 @@ async fn handle_upload_object(
         size: obj.size,
         authenticated: Some(true),
         actions: BatchResponseObjectActions {
-            download: Some(BatchResponseObjectAction {
+            upload: Some(BatchResponseObjectAction {
                 header: presigned
                     .headers()
                     .map(|(k, v)| (k.to_owned(), v.to_owned()))
