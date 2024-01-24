@@ -726,6 +726,7 @@ fn forwarded_for_trusted_host(
     headers: &HeaderMap,
     trusted: &HashSet<String>,
 ) -> Result<bool, GitLfsErrorResponse<'static>> {
+    println!("Trusted: {:?}, headers: {:?}", trusted, headers);
     if let Some(forwarded_for) = headers.get("X-Forwarded-For") {
         if let Ok(forwarded_for) = forwarded_for.to_str() {
             if trusted.contains(forwarded_for) {
