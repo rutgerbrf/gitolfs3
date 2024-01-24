@@ -299,6 +299,18 @@ fn is_git_lfs_json_mimetype(mimetype: &str) -> bool {
     let Ok(mime) = mimetype.parse::<mime::Mime>() else {
         return false;
     };
+    println!(
+        "MIME type: {:?}; type: {}, subtype: {}, suffix: {}, charset: {}",
+        mime,
+        mime.type_(),
+        mime.subtype(),
+        mime.suffix()
+            .map(|name| name.to_string())
+            .unwrap_or("<no suffix>".to_string()),
+        mime.get_param(mime::CHARSET)
+            .map(|name| name.to_string())
+            .unwrap_or("<no charset>".to_string())
+    );
     if mime.type_() != mime::APPLICATION
         || mime.subtype() != "vnd.git-lfs"
         || mime.suffix() != Some(mime::JSON)

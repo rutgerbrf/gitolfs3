@@ -1,4 +1,4 @@
-use std::{process::ExitCode, os::unix::process::CommandExt};
+use std::{os::unix::process::CommandExt, process::ExitCode};
 
 fn parse_sq(s: &str) -> Option<(String, &str)> {
     #[derive(PartialEq, Eq)]
@@ -7,13 +7,13 @@ fn parse_sq(s: &str) -> Option<(String, &str)> {
         Unquoted { may_escape: bool },
         UnquotedEscaped,
     }
-    
+
     let mut result = String::new();
     let mut state = SqState::Unquoted { may_escape: false };
     let mut remaining = "";
     for (i, c) in s.char_indices() {
         match state {
-            SqState::Unquoted { may_escape: false} => {
+            SqState::Unquoted { may_escape: false } => {
                 if c != '\'' {
                     return None;
                 }
@@ -26,7 +26,7 @@ fn parse_sq(s: &str) -> Option<(String, &str)> {
                 }
                 result.push(c);
             }
-            SqState::Unquoted { may_escape: true }=> {
+            SqState::Unquoted { may_escape: true } => {
                 if is_posix_space(c) {
                     remaining = &s[i..];
                     break;
@@ -47,7 +47,7 @@ fn parse_sq(s: &str) -> Option<(String, &str)> {
     }
 
     if state != (SqState::Unquoted { may_escape: true }) {
-        return None
+        return None;
     }
     Some((result, remaining))
 }
