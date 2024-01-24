@@ -160,7 +160,6 @@ fn get_s3_client(env: &Env) -> Result<aws_sdk_s3::Client, std::io::Error> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    env_logger::init();
     tracing_subscriber::fmt::init();
 
     let env = match Env::load() {
