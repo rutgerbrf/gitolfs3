@@ -642,7 +642,7 @@ async fn handle_download_object(
     }
 
     if let Some(content_length) = result.content_length() {
-        if content_length < 0 {
+        if content_length > 0 {
             match state
                 .dl_limiter
                 .lock()
