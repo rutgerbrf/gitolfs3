@@ -287,11 +287,14 @@ enum GitLfsJsonRejection {
 
 impl IntoResponse for GitLfsJsonRejection {
     fn into_response(self) -> Response {
-        make_error_resp(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            &format!("Expected request with `Content-Type: {LFS_MIME}`"),
-        )
-        .into_response()
+        match self {
+            Self::Json(rej) => rej.into_response(),
+            Self::MissingGitLfsJsonContentType => make_error_resp(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                &format!("Expected request with `Content-Type: {LFS_MIME}`"),
+            )
+            .into_response(),
+        }
     }
 }
 
@@ -943,4 +946,20 @@ async fn obj_download(
     let body = axum::body::Body::from_stream(stream);
 
     (headers, body).into_response()
+}
+
+#[test]
+fn test_mimetype() {
+    assert!(is_git_lfs_json_mimetype("application/vnd.git-lfs+json"));
+    assert!(!is_git_lfs_json_mimetype("application/vnd.git-lfs"));
+    assert!(!is_git_lfs_json_mimetype("application/json"));
+    assert!(is_git_lfs_json_mimetype(
+        "application/vnd.git-lfs+json; charset=utf-8"
+    ));
+    assert!(is_git_lfs_json_mimetype(
+        "application/vnd.git-lfs+json; charset=UTF-8"
+    ));
+    assert!(!is_git_lfs_json_mimetype(
+        "application/vnd.git-lfs+json; charset=ISO-8859-1"
+    ));
 }
