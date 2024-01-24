@@ -1043,21 +1043,21 @@ impl DownloadLimiter {
             return Ok(false);
         }
         self.current += n;
-        self.write_new_limit().await?;
+        self.write_new_count().await?;
         Ok(true)
     }
 
     async fn reset(&mut self) {
         self.current = 0;
-        if let Err(e) = self.write_new_limit().await {
+        if let Err(e) = self.write_new_count().await {
             println!("Failed to reset download counter: {e}");
         }
     }
 
-    async fn write_new_limit(&self) -> tokio::io::Result<()> {
+    async fn write_new_count(&self) -> tokio::io::Result<()> {
         let cwd = tokio::fs::File::open(std::env::current_dir()?).await?;
         let mut file = tokio::fs::File::create(".gitolfs3-dlimit.tmp").await?;
-        file.write_all(self.limit.to_string().as_bytes()).await?;
+        file.write_all(self.current.to_string().as_bytes()).await?;
         file.sync_all().await?;
         tokio::fs::rename(".gitolfs3-dlimit.tmp", ".gitolfs3-dlimit").await?;
         cwd.sync_all().await
