@@ -136,7 +136,7 @@ fn parse_hex_exact(value: &str, buf: &mut [u8]) -> Result<(), ParseHexError> {
     for (i, c) in value.bytes().enumerate() {
         if let Some(b) = decode_nibble(c) {
             if i % 2 == 0 {
-                buf[i / 2] |= b << 4;
+                buf[i / 2] = b << 4;
             } else {
                 buf[i / 2] |= b;
             }

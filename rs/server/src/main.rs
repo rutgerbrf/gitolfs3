@@ -985,25 +985,27 @@ fn test_validate_claims() {
     let key = "00232f7a019bd34e3921ee6c5f04caf48a4489d1be5d1999038950a7054e0bfea369ce2becc0f13fd3c69f8af2384a25b7ac2d52eb52c33722f3c00c50d4c9c2";
     let key: common::Key = key.parse().unwrap();
 
-    let expires_at = Utc::now() + std::time::Duration::from_secs(5 * 60);
     let claims = common::Claims {
-        expires_at,
+        expires_at: Utc::now() + std::time::Duration::from_secs(5 * 60),
         repo_path: "lfs-test.git",
         specific_claims: common::SpecificClaims::BatchApi(common::Operation::Download),
     };
     let tag = common::generate_tag(claims, &key).unwrap();
-    let header_value = format!("Gitolfs3-Hmac-Sha256 {tag} {}", expires_at.timestamp());
+    let header_value = format!(
+        "Gitolfs3-Hmac-Sha256 {tag} {}",
+        claims.expires_at.timestamp()
+    );
 
     let conf = AuthorizationConfig {
         key,
         trusted_forwarded_hosts: HashSet::new(),
     };
-    let claims = VerifyClaimsInput {
-        repo_path: "lfs-test.git",
-        specific_claims: common::SpecificClaims::BatchApi(common::Operation::Download),
+    let verification_claims = VerifyClaimsInput {
+        repo_path: claims.repo_path,
+        specific_claims: claims.specific_claims,
     };
     let mut headers = HeaderMap::new();
     headers.insert(header::AUTHORIZATION, header_value.try_into().unwrap());
 
-    assert!(verify_claims(&conf, &claims, &headers).unwrap());
+    assert!(verify_claims(&conf, &verification_claims, &headers).unwrap());
 }
