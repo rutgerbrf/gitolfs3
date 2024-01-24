@@ -722,20 +722,19 @@ struct AuthorizationConfig {
 
 struct Trusted(bool);
 
-fn forwarded_for_trusted_host(
+fn forwarded_from_trusted_host(
     headers: &HeaderMap,
     trusted: &HashSet<String>,
 ) -> Result<bool, GitLfsErrorResponse<'static>> {
-    println!("Trusted: {:?}, headers: {:?}", trusted, headers);
-    if let Some(forwarded_for) = headers.get("X-Forwarded-For") {
-        if let Ok(forwarded_for) = forwarded_for.to_str() {
-            if trusted.contains(forwarded_for) {
+    if let Some(forwarded_host) = headers.get("X-Forwarded-Host") {
+        if let Ok(forwarded_host) = forwarded_host.to_str() {
+            if trusted.contains(forwarded_host) {
                 return Ok(true);
             }
         } else {
             return Err(make_error_resp(
                 StatusCode::NOT_FOUND,
-                "Invalid X-Forwarded-For header",
+                "Invalid X-Forwarded-Host header",
             ));
         }
     }
@@ -765,7 +764,7 @@ fn authorize_batch(
         return Ok(Trusted(true));
     }
 
-    let trusted = forwarded_for_trusted_host(headers, &conf.trusted_forwarded_hosts)?;
+    let trusted = forwarded_from_trusted_host(headers, &conf.trusted_forwarded_hosts)?;
     if operation != common::Operation::Download {
         if trusted {
             return Err(make_error_resp(
