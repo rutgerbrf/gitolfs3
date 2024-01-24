@@ -740,6 +740,7 @@ fn forwarded_from_trusted_host(
     }
     Ok(false)
 }
+
 const REPO_NOT_FOUND: GitLfsErrorResponse =
     make_error_resp(StatusCode::NOT_FOUND, "Repository not found");
 
@@ -796,10 +797,11 @@ fn is_repo_public(name: &str) -> Option<bool> {
     if !repo_exists(name) {
         return None;
     }
-    std::fs::metadata(format!("{name}/git-daemon-export-ok"))
-        .ok()?
-        .is_file()
-        .into()
+    match std::fs::metadata(format!("{name}/git-daemon-export-ok")) {
+        Ok(metadata) if metadata.is_file() => Some(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(false),
+        _ => None,
+    }
 }
 
 async fn batch(
