@@ -80,33 +80,35 @@ fn is_posix_space(c: char) -> bool {
 }
 
 fn main() -> ExitCode {
+    let bad_usage = ExitCode::from(2);
+
     let mut args = std::env::args().skip(1);
     if args.next() != Some("-c".to_string()) {
         eprintln!("Expected usage: shell -c <argument>");
-        return ExitCode::FAILURE;
+        return bad_usage;
     }
     let Some(cmd) = args.next() else {
         eprintln!("Missing argument for argument '-c'");
-        return ExitCode::FAILURE;
+        return bad_usage;
     };
     if args.next() != None {
         eprintln!("Too many arguments passed");
-        return ExitCode::FAILURE;
+        return bad_usage;
     }
 
     let Some(mut cmd) = parse_cmd(&cmd) else {
         eprintln!("Bad command");
-        return ExitCode::FAILURE;
+        return bad_usage;
     };
 
     let Some(mut program) = cmd.drain(0..1).next() else {
         eprintln!("Bad command");
-        return ExitCode::FAILURE;
+        return bad_usage;
     };
     if program == "git" {
         let Some(subcommand) = cmd.drain(0..1).next() else {
             eprintln!("Bad command");
-            return ExitCode::FAILURE;
+            return bad_usage;
         };
         program.push('-');
         program.push_str(&subcommand);
@@ -118,18 +120,21 @@ fn main() -> ExitCode {
     if git_cmds.contains(&program.as_str()) {
         if cmd.len() != 1 {
             eprintln!("Bad command");
-            return ExitCode::FAILURE;
+            return bad_usage;
         }
         let repository = cmd[0].trim_start_matches('/');
         args.push(repository);
     } else if program == "git-lfs-authenticate" {
         if cmd.len() != 2 {
             eprintln!("Bad command");
-            return ExitCode::FAILURE;
+            return bad_usage;
         }
         let repository = cmd[0].trim_start_matches('/');
         args.push(repository);
         args.push(&cmd[1]);
+    } else {
+        eprintln!("Unknown command");
+        return bad_usage;
     }
 
     let e = std::process::Command::new(program).args(args).exec();
