@@ -462,7 +462,7 @@ async fn handle_upload_object(
         .s3_client
         .head_object()
         .bucket(&state.s3_bucket)
-        .key(full_path)
+        .key(full_path.clone())
         .checksum_mode(aws_sdk_s3::types::ChecksumMode::Enabled)
         .send()
         .await
@@ -496,6 +496,8 @@ async fn handle_upload_object(
     let Ok(presigned) = state
         .s3_client
         .put_object()
+        .bucket(&state.s3_bucket)
+        .key(full_path)
         .checksum_sha256(obj.oid.to_string())
         .content_length(obj.size)
         .presigned(config)
@@ -539,7 +541,7 @@ async fn handle_download_object(
         .s3_client
         .head_object()
         .bucket(&state.s3_bucket)
-        .key(full_path)
+        .key(&full_path)
         .checksum_mode(aws_sdk_s3::types::ChecksumMode::Enabled)
         .send()
         .await
@@ -582,7 +584,14 @@ async fn handle_download_object(
                 "Failed to generate upload URL".to_string(),
             );
         };
-        let Ok(presigned) = state.s3_client.get_object().presigned(config).await else {
+        let Ok(presigned) = state
+            .s3_client
+            .get_object()
+            .bucket(&state.s3_bucket)
+            .key(full_path)
+            .presigned(config)
+            .await
+        else {
             return BatchResponseObject::error(
                 obj,
                 StatusCode::INTERNAL_SERVER_ERROR,
