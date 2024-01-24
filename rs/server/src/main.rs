@@ -107,6 +107,7 @@ struct Env {
     s3_access_key_id: String,
     s3_secret_access_key: String,
     s3_bucket: String,
+    s3_region: String,
     s3_endpoint: String,
     base_url: String,
     key_path: String,
@@ -125,6 +126,7 @@ impl Env {
         Ok(Env {
             s3_secret_access_key: require_env("GITOLFS3_S3_SECRET_ACCESS_KEY_FILE")?,
             s3_access_key_id: require_env("GITOLFS3_S3_ACCESS_KEY_ID_FILE")?,
+            s3_region: require_env("GITOLFS3_S3_REGION")?,
             s3_endpoint: require_env("GITOLFS3_S3_ENDPOINT")?,
             s3_bucket: require_env("GITOLFS3_S3_BUCKET")?,
             base_url: require_env("GITOLFS3_BASE_URL")?,
@@ -150,6 +152,7 @@ fn get_s3_client(env: &Env) -> Result<aws_sdk_s3::Client, std::io::Error> {
     );
     let config = aws_config::SdkConfig::builder()
         .behavior_version(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(env.s3_region.clone()))
         .endpoint_url(&env.s3_endpoint)
         .credentials_provider(aws_sdk_s3::config::SharedCredentialsProvider::new(
             credentials,
