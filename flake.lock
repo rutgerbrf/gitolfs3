@@ -71,7 +71,31 @@
         "advisory-db": "advisory-db",
         "crane": "crane",
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "rust-overlay": "rust-overlay"
+      }
+    },
+    "rust-overlay": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1706149103,
+        "narHash": "sha256-Me28A0tAb1EzZIozfi31+hnsQIaYU0HXaMPWCe+zByc=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "493cc67d5e9f1b298241b8d92aa06883296acc3f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
       }
     },
     "systems": {

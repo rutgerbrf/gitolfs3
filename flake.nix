@@ -2,24 +2,39 @@
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2311.*.tar.gz";
     flake-utils.url = "https://flakehub.com/f/numtide/flake-utils/0.1.90.tar.gz";
-    crane.url = "https://flakehub.com/f/ipetkov/crane/0.16.0.tar.gz";
-    crane.inputs.nixpkgs.follows = "nixpkgs";
+
+    crane = {
+      url = "https://flakehub.com/f/ipetkov/crane/0.16.0.tar.gz";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     advisory-db = {
       url = "github:rustsec/advisory-db";
       flake = false;
     };
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        flake-utils.follows = "flake-utils";
+      };
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane, advisory-db, ... }@inputs:
+  outputs = { self, nixpkgs, flake-utils, crane, rust-overlay, advisory-db, ... }@inputs:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
           pkgs = import nixpkgs {
             inherit system;
-            overlays = [ ];
+            overlays = [ (import rust-overlay) ];
           };
 
-          craneLib = crane.lib.${system};
+          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = [ "rust-src" ];
+          };
+          craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
           src = craneLib.cleanCargoSource (craneLib.path ./.);
 
           commonArgs = {
@@ -44,19 +59,19 @@
               inherit cargoArtifacts;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
             });
-  
+
             gitolfs3-doc = craneLib.cargoDoc (commonArgs // {
               inherit cargoArtifacts;
             });
-  
+
             # Check formatting
             gitolfs3-fmt = craneLib.cargoFmt commonArgs;
-  
+
             # Audit dependencies
             gitolfs3-audit = craneLib.cargoAudit (commonArgs // {
               inherit advisory-db;
             });
-  
+
             # Run tests with cargo-nextest
             gitolfs3-nextest = craneLib.cargoNextest (commonArgs // {
               inherit cargoArtifacts;
@@ -70,6 +85,9 @@
 
           devShells.default = craneLib.devShell {
             checks = self.checks.${system};
+
+            packages = [ rustToolchain pkgs.rust-analyzer ];
+            RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
           };
 
           formatter = pkgs.nixpkgs-fmt;
