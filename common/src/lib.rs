@@ -254,27 +254,6 @@ impl<B: AsRef<[u8]>> fmt::Display for HexFmt<B> {
     }
 }
 
-pub struct EscJsonFmt<'a>(pub &'a str);
-
-impl<'a> fmt::Display for EscJsonFmt<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let EscJsonFmt(buf) = self;
-        for c in buf.chars() {
-            match c {
-                '"' => f.write_str("\\\"")?,   // quote
-                '\\' => f.write_str("\\\\")?,  // backslash
-                '\x08' => f.write_str("\\b")?, // backspace
-                '\x0C' => f.write_str("\\f")?, // form feed
-                '\n' => f.write_str("\\n")?,   // line feed
-                '\r' => f.write_str("\\r")?,   // carriage return
-                '\t' => f.write_str("\\t")?,   // horizontal tab
-                _ => f.write_char(c)?,
-            };
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Copy, Clone)]
 pub struct Digest<const N: usize> {
     inner: [u8; N],

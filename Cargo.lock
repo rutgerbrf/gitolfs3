@@ -878,6 +878,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "common",
+ "serde_json",
 ]
 
 [[package]]

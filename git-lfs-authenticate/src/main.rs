@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
+use serde_json::json;
 use std::{process::ExitCode, time::Duration};
 
 fn main() -> ExitCode {
@@ -39,14 +40,17 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
 
-    println!(
-        "{{\"header\":{{\"Authorization\":\"Gitolfs3-Hmac-Sha256 {tag} {}\"}},\
-        \"expires_at\":\"{}\",\"href\":\"{}{}/info/lfs\"}}",
-        expires_at.timestamp(),
-        common::EscJsonFmt(&expires_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
-        common::EscJsonFmt(&config.href_base),
-        common::EscJsonFmt(&repo_name),
-    );
+    let response = json!({
+        "header": {
+            "Authorization": format!(
+                "Gitolfs3-Hmac-Sha256 {tag} {}",
+                expires_at.timestamp()
+            ),
+        },
+        "expires_at": expires_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "href": format!("{}{}/info/lfs", config.href_base, repo_name),
+    });
+    println!("{}", response.to_string());
 
     ExitCode::SUCCESS
 }
