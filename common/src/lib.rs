@@ -1,9 +1,10 @@
 use chrono::{DateTime, Utc};
-use serde::de;
-use serde::{Deserialize, Serialize};
-use std::fmt::Write;
-use std::ops;
-use std::{fmt, str::FromStr};
+use serde::{de, Deserialize, Serialize};
+use std::{
+    fmt::{self, Write},
+    ops,
+    str::FromStr,
+};
 use subtle::ConstantTimeEq;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]

@@ -1,197 +1,13 @@
-use std::{fmt, process::ExitCode, time::Duration};
-
+use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use common::{Operation, ParseOperationError};
-
-fn help() {
-    eprintln!("Usage: git-lfs-authenticate <REPO> upload/download");
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum RepoNameError {
-    TooLong,
-    UnresolvedPath,
-    AbsolutePath,
-    MissingGitSuffix,
-}
-
-impl fmt::Display for RepoNameError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::TooLong => write!(f, "too long (more than 100 characters)"),
-            Self::UnresolvedPath => {
-                write!(f, "contains path one or more path elements '.' and '..'")
-            }
-            Self::AbsolutePath => {
-                write!(f, "starts with '/', which is not allowed")
-            }
-            Self::MissingGitSuffix => write!(f, "misses '.git' suffix"),
-        }
-    }
-}
-
-// Using `Result<(), E>` here instead of `Option<E>` because `None` typically signifies some error
-// state with no further details provided. If we were to return an `Option` type, the user would
-// have to first transform it into a `Result` type in order to use the `?` operator, meaning that
-// they would have to the following operation to get the type into the right shape:
-// `validate_repo_path(path).map_or(Ok(()), Err)`. That would not be very ergonomic.
-fn validate_repo_path(path: &str) -> Result<(), RepoNameError> {
-    if path.len() > 100 {
-        return Err(RepoNameError::TooLong);
-    }
-    if path.contains("//")
-        || path.contains("/./")
-        || path.contains("/../")
-        || path.starts_with("./")
-        || path.starts_with("../")
-    {
-        return Err(RepoNameError::UnresolvedPath);
-    }
-    if path.starts_with('/') {
-        return Err(RepoNameError::AbsolutePath);
-    }
-    if !path.ends_with(".git") {
-        return Err(RepoNameError::MissingGitSuffix);
-    }
-    Ok(())
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum ParseCmdlineError {
-    UnknownOperation(ParseOperationError),
-    InvalidRepoName(RepoNameError),
-    UnexpectedArgCount(ArgCountError),
-}
-
-impl From<RepoNameError> for ParseCmdlineError {
-    fn from(value: RepoNameError) -> Self {
-        Self::InvalidRepoName(value)
-    }
-}
-
-impl From<ParseOperationError> for ParseCmdlineError {
-    fn from(value: ParseOperationError) -> Self {
-        Self::UnknownOperation(value)
-    }
-}
-
-impl From<ArgCountError> for ParseCmdlineError {
-    fn from(value: ArgCountError) -> Self {
-        Self::UnexpectedArgCount(value)
-    }
-}
-
-impl fmt::Display for ParseCmdlineError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::UnknownOperation(e) => write!(f, "unknown operation: {e}"),
-            Self::InvalidRepoName(e) => write!(f, "invalid repository name: {e}"),
-            Self::UnexpectedArgCount(e) => e.fmt(f),
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-struct ArgCountError {
-    provided: usize,
-    expected: usize,
-}
-
-impl fmt::Display for ArgCountError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "got {} argument(s), expected {}",
-            self.provided, self.expected
-        )
-    }
-}
-
-fn get_cmdline_args<const N: usize>() -> Result<[String; N], ArgCountError> {
-    let args = std::env::args();
-    if args.len() - 1 != N {
-        return Err(ArgCountError {
-            provided: args.len() - 1,
-            expected: N,
-        });
-    }
-
-    // Does not allocate.
-    const EMPTY_STRING: String = String::new();
-    let mut values = [EMPTY_STRING; N];
-
-    // Skip the first element; we do not care about the program name.
-    for (i, arg) in args.skip(1).enumerate() {
-        values[i] = arg
-    }
-    Ok(values)
-}
-
-fn parse_cmdline() -> Result<(String, Operation), ParseCmdlineError> {
-    let [repo_path, op_str] = get_cmdline_args::<2>()?;
-    let op: Operation = op_str.parse()?;
-    validate_repo_path(&repo_path)?;
-    Ok((repo_path.to_string(), op))
-}
-
-fn repo_exists(name: &str) -> bool {
-    match std::fs::metadata(name) {
-        Ok(metadata) => metadata.is_dir(),
-        _ => false,
-    }
-}
-
-struct Config {
-    href_base: String,
-    key_path: String,
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum LoadConfigError {
-    BaseUrlNotProvided,
-    BaseUrlSlashSuffixMissing,
-    KeyPathNotProvided,
-}
-
-impl fmt::Display for LoadConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::BaseUrlNotProvided => write!(f, "base URL not provided"),
-            Self::BaseUrlSlashSuffixMissing => write!(f, "base URL does not end with slash"),
-            Self::KeyPathNotProvided => write!(f, "key path not provided"),
-        }
-    }
-}
-
-fn load_config() -> Result<Config, LoadConfigError> {
-    let Ok(href_base) = std::env::var("GITOLFS3_HREF_BASE") else {
-        return Err(LoadConfigError::BaseUrlNotProvided);
-    };
-    if !href_base.ends_with('/') {
-        return Err(LoadConfigError::BaseUrlSlashSuffixMissing);
-    }
-    let Ok(key_path) = std::env::var("GITOLFS3_KEY_PATH") else {
-        return Err(LoadConfigError::KeyPathNotProvided);
-    };
-    Ok(Config {
-        href_base,
-        key_path,
-    })
-}
+use std::{process::ExitCode, time::Duration};
 
 fn main() -> ExitCode {
-    let config = match load_config() {
+    let config = match Config::load() {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Failed to load config: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let key = match common::load_key(&config.key_path) {
-        Ok(key) => key,
-        Err(e) => {
-            eprintln!("Failed to load key: {e}");
-            return ExitCode::FAILURE;
+            eprintln!("Error: {e}");
+            return ExitCode::from(2);
         }
     };
 
@@ -199,7 +15,7 @@ fn main() -> ExitCode {
         Ok(args) => args,
         Err(e) => {
             eprintln!("Error: {e}\n");
-            help();
+            eprintln!("Usage: git-lfs-authenticate <REPO> upload/download");
             // Exit code 2 signifies bad usage of CLI.
             return ExitCode::from(2);
         }
@@ -217,7 +33,7 @@ fn main() -> ExitCode {
             repo_path: &repo_name,
             expires_at,
         },
-        key,
+        config.key,
     ) else {
         eprintln!("Failed to generate validation tag");
         return ExitCode::FAILURE;
@@ -233,4 +49,81 @@ fn main() -> ExitCode {
     );
 
     ExitCode::SUCCESS
+}
+
+struct Config {
+    href_base: String,
+    key: common::Key,
+}
+
+impl Config {
+    fn load() -> Result<Self> {
+        let Ok(href_base) = std::env::var("GITOLFS3_HREF_BASE") else {
+            bail!("configured base URL not provided");
+        };
+        if !href_base.ends_with('/') {
+            bail!("configured base URL does not end with a slash");
+        }
+
+        let Ok(key_path) = std::env::var("GITOLFS3_KEY_PATH") else {
+            bail!("key path not provided");
+        };
+        let key = common::load_key(&key_path).map_err(|e| anyhow!("failed to load key: {e}"))?;
+
+        Ok(Self { href_base, key })
+    }
+}
+
+fn parse_cmdline() -> Result<(String, common::Operation)> {
+    let [repo_path, op_str] = get_cmdline_args::<2>()?;
+    let op: common::Operation = op_str
+        .parse()
+        .map_err(|e| anyhow!("unknown operation: {e}"))?;
+    validate_repo_path(&repo_path).map_err(|e| anyhow!("invalid repository name: {e}"))?;
+    Ok((repo_path.to_string(), op))
+}
+
+fn get_cmdline_args<const N: usize>() -> Result<[String; N]> {
+    let args = std::env::args();
+    if args.len() - 1 != N {
+        bail!("got {} argument(s), expected {}", args.len() - 1, N);
+    }
+
+    // Does not allocate.
+    const EMPTY_STRING: String = String::new();
+    let mut values = [EMPTY_STRING; N];
+
+    // Skip the first element; we do not care about the program name.
+    for (i, arg) in args.skip(1).enumerate() {
+        values[i] = arg
+    }
+    Ok(values)
+}
+
+fn validate_repo_path(path: &str) -> Result<()> {
+    if path.len() > 100 {
+        bail!("too long (more than 100 characters)");
+    }
+    if path.contains("//")
+        || path.contains("/./")
+        || path.contains("/../")
+        || path.starts_with("./")
+        || path.starts_with("../")
+    {
+        bail!("contains one or more path elements '.' and '..'");
+    }
+    if path.starts_with('/') {
+        bail!("starts with '/', which is not allowed");
+    }
+    if !path.ends_with(".git") {
+        bail!("missed '.git' suffix");
+    }
+    Ok(())
+}
+
+fn repo_exists(name: &str) -> bool {
+    match std::fs::metadata(name) {
+        Ok(metadata) => metadata.is_dir(),
+        _ => false,
+    }
 }
