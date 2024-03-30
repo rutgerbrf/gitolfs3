@@ -7,6 +7,27 @@ use std::{
 };
 use subtle::ConstantTimeEq;
 
+#[repr(u8)]
+enum AuthType {
+    BatchApi = 1,
+    Download = 2,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Claims<'a> {
+    pub specific_claims: SpecificClaims,
+    pub repo_path: &'a str,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum SpecificClaims {
+    BatchApi(Operation),
+    Download(Oid),
+}
+
+pub type Oid = Digest<32>;
+
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Operation {
@@ -14,6 +35,29 @@ pub enum Operation {
     Download = 1,
     #[serde(rename = "upload")]
     Upload = 2,
+}
+
+/// Returns None if the claims are invalid. Repo path length may be no more than 100 bytes.
+pub fn generate_tag(claims: Claims, key: impl AsRef<[u8]>) -> Option<Digest<32>> {
+    if claims.repo_path.len() > 100 {
+        return None;
+    }
+
+    let mut hmac = hmac_sha256::HMAC::new(key);
+    match claims.specific_claims {
+        SpecificClaims::BatchApi(operation) => {
+            hmac.update([AuthType::BatchApi as u8]);
+            hmac.update([operation as u8]);
+        }
+        SpecificClaims::Download(oid) => {
+            hmac.update([AuthType::Download as u8]);
+            hmac.update(oid.as_bytes());
+        }
+    }
+    hmac.update([claims.repo_path.len() as u8]);
+    hmac.update(claims.repo_path.as_bytes());
+    hmac.update(claims.expires_at.timestamp().to_be_bytes());
+    Some(hmac.finalize().into())
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -35,12 +79,6 @@ impl FromStr for Operation {
             _ => Err(ParseOperationError),
         }
     }
-}
-
-#[repr(u8)]
-enum AuthType {
-    BatchApi = 1,
-    Download = 2,
 }
 
 /// None means out of range.
@@ -148,6 +186,13 @@ fn parse_hex_exact(value: &str, buf: &mut [u8]) -> Result<(), ParseHexError> {
     Ok(())
 }
 
+pub type Key = SafeByteArray<64>;
+
+pub fn load_key(path: &str) -> Result<Key, ReadHexError> {
+    let key_str = std::fs::read_to_string(path).map_err(ReadHexError::Io)?;
+    key_str.trim().parse().map_err(ReadHexError::Format)
+}
+
 pub struct SafeByteArray<const N: usize> {
     inner: [u8; N],
 }
@@ -190,44 +235,6 @@ impl<const N: usize> FromStr for SafeByteArray<N> {
         parse_hex_exact(value, &mut sba.inner)?;
         Ok(sba)
     }
-}
-
-pub type Oid = Digest<32>;
-
-#[derive(Debug, Copy, Clone)]
-pub enum SpecificClaims {
-    BatchApi(Operation),
-    Download(Oid),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Claims<'a> {
-    pub specific_claims: SpecificClaims,
-    pub repo_path: &'a str,
-    pub expires_at: DateTime<Utc>,
-}
-
-/// Returns None if the claims are invalid. Repo path length may be no more than 100 bytes.
-pub fn generate_tag(claims: Claims, key: impl AsRef<[u8]>) -> Option<Digest<32>> {
-    if claims.repo_path.len() > 100 {
-        return None;
-    }
-
-    let mut hmac = hmac_sha256::HMAC::new(key);
-    match claims.specific_claims {
-        SpecificClaims::BatchApi(operation) => {
-            hmac.update([AuthType::BatchApi as u8]);
-            hmac.update([operation as u8]);
-        }
-        SpecificClaims::Download(oid) => {
-            hmac.update([AuthType::Download as u8]);
-            hmac.update(oid.as_bytes());
-        }
-    }
-    hmac.update([claims.repo_path.len() as u8]);
-    hmac.update(claims.repo_path.as_bytes());
-    hmac.update(claims.expires_at.timestamp().to_be_bytes());
-    Some(hmac.finalize().into())
 }
 
 pub struct HexFmt<B: AsRef<[u8]>>(pub B);
@@ -338,11 +345,4 @@ impl<const N: usize> Serialize for Digest<N> {
     {
         serializer.serialize_str(&format!("{self}"))
     }
-}
-
-pub type Key = SafeByteArray<64>;
-
-pub fn load_key(path: &str) -> Result<Key, ReadHexError> {
-    let key_str = std::fs::read_to_string(path).map_err(ReadHexError::Io)?;
-    key_str.trim().parse().map_err(ReadHexError::Format)
 }

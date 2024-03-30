@@ -762,28 +762,46 @@ fn authorize_batch(
         specific_claims: common::SpecificClaims::BatchApi(operation),
         repo_path,
     };
-    if verify_claims(conf, &claims, headers)? {
-        return Ok(Trusted(true));
+    if !verify_claims(conf, &claims, headers)? {
+        return authorize_batch_unauthenticated(conf, public, operation, headers);
     }
+    return Ok(Trusted(true));
+}
 
+fn authorize_batch_unauthenticated(
+    conf: &AuthorizationConfig,
+    public: bool,
+    operation: common::Operation,
+    headers: &HeaderMap,
+) -> Result<Trusted, GitLfsErrorResponse<'static>> {
     let trusted = forwarded_from_trusted_host(headers, &conf.trusted_forwarded_hosts)?;
-    if operation != common::Operation::Download {
-        if trusted {
+    match operation {
+        common::Operation::Upload => {
+            // Trusted users can clone all repositories (by virtue of accessing the server via a
+            // trusted network). However, they can not push without proper authentication. Untrusted
+            // users who are also not authenticated should not need to know which repositories exists.
+            // Therefore, we tell untrusted && unauthenticated users that the repo doesn't exist, but
+            // tell trusted users that they need to authenticate.
+            if !trusted {
+                return Err(REPO_NOT_FOUND);
+            }
             return Err(make_error_resp(
                 StatusCode::FORBIDDEN,
                 "Authentication required to upload",
             ));
+        },
+        common::Operation::Download => {
+            // Again, trusted users can see all repos. For untrusted users, we first need to check
+            // whether the repo is public before we authorize. If the user is untrusted and the
+            // repo isn't public, we just act like it doesn't even exist.
+            if !trusted {
+                if !public {
+                    return Err(REPO_NOT_FOUND)
+                }
+                return Ok(Trusted(false))
+            }
+            return Ok(Trusted(true));
         }
-        return Err(REPO_NOT_FOUND);
-    }
-    if trusted {
-        return Ok(Trusted(true));
-    }
-
-    if public {
-        Ok(Trusted(false))
-    } else {
-        Err(REPO_NOT_FOUND)
     }
 }
 
@@ -909,35 +927,32 @@ fn verify_claims(
     const INVALID_AUTHZ_HEADER: GitLfsErrorResponse =
         make_error_resp(StatusCode::BAD_REQUEST, "Invalid authorization header");
 
-    if let Some(authz) = headers.get(header::AUTHORIZATION) {
-        if let Ok(authz) = authz.to_str() {
-            if let Some(val) = authz.strip_prefix("Gitolfs3-Hmac-Sha256 ") {
-                let (tag, expires_at) = val.split_once(' ').ok_or(INVALID_AUTHZ_HEADER)?;
-                let tag: common::Digest<32> = tag.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
-                let expires_at: i64 = expires_at.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
-                let expires_at =
-                    DateTime::<Utc>::from_timestamp(expires_at, 0).ok_or(INVALID_AUTHZ_HEADER)?;
-                let Some(expected_tag) = common::generate_tag(
-                    common::Claims {
-                        specific_claims: claims.specific_claims,
-                        repo_path: claims.repo_path,
-                        expires_at,
-                    },
-                    &conf.key,
-                ) else {
-                    return Err(make_error_resp(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Internal server error",
-                    ));
-                };
-                if tag == expected_tag {
-                    return Ok(true);
-                }
-            }
-        }
+    let Some(authz) = headers.get(header::AUTHORIZATION) else {
+        return Ok(false);
+    };
+    let authz = authz.to_str().map_err(|_| INVALID_AUTHZ_HEADER)?;
+    let val = authz.strip_prefix("Gitolfs3-Hmac-Sha256 ").ok_or(INVALID_AUTHZ_HEADER)?;
+    let (tag, expires_at) = val.split_once(' ').ok_or(INVALID_AUTHZ_HEADER)?;
+    let tag: common::Digest<32> = tag.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
+    let expires_at: i64 = expires_at.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
+    let expires_at =
+        DateTime::<Utc>::from_timestamp(expires_at, 0).ok_or(INVALID_AUTHZ_HEADER)?;
+    let expected_tag = common::generate_tag(
+        common::Claims {
+            specific_claims: claims.specific_claims,
+            repo_path: claims.repo_path,
+            expires_at,
+        },
+        &conf.key,
+    ).ok_or_else(|| make_error_resp(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Internal server error",
+    ))?;
+    if tag != expected_tag {
         return Err(INVALID_AUTHZ_HEADER);
     }
-    Ok(false)
+
+    Ok(true)
 }
 
 fn authorize_get(
