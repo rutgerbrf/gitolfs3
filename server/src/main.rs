@@ -789,16 +789,16 @@ fn authorize_batch_unauthenticated(
                 StatusCode::FORBIDDEN,
                 "Authentication required to upload",
             ));
-        },
+        }
         common::Operation::Download => {
             // Again, trusted users can see all repos. For untrusted users, we first need to check
             // whether the repo is public before we authorize. If the user is untrusted and the
             // repo isn't public, we just act like it doesn't even exist.
             if !trusted {
                 if !public {
-                    return Err(REPO_NOT_FOUND)
+                    return Err(REPO_NOT_FOUND);
                 }
-                return Ok(Trusted(false))
+                return Ok(Trusted(false));
             }
             return Ok(Trusted(true));
         }
@@ -931,12 +931,13 @@ fn verify_claims(
         return Ok(false);
     };
     let authz = authz.to_str().map_err(|_| INVALID_AUTHZ_HEADER)?;
-    let val = authz.strip_prefix("Gitolfs3-Hmac-Sha256 ").ok_or(INVALID_AUTHZ_HEADER)?;
+    let val = authz
+        .strip_prefix("Gitolfs3-Hmac-Sha256 ")
+        .ok_or(INVALID_AUTHZ_HEADER)?;
     let (tag, expires_at) = val.split_once(' ').ok_or(INVALID_AUTHZ_HEADER)?;
     let tag: common::Digest<32> = tag.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
     let expires_at: i64 = expires_at.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
-    let expires_at =
-        DateTime::<Utc>::from_timestamp(expires_at, 0).ok_or(INVALID_AUTHZ_HEADER)?;
+    let expires_at = DateTime::<Utc>::from_timestamp(expires_at, 0).ok_or(INVALID_AUTHZ_HEADER)?;
     let expected_tag = common::generate_tag(
         common::Claims {
             specific_claims: claims.specific_claims,
@@ -944,10 +945,8 @@ fn verify_claims(
             expires_at,
         },
         &conf.key,
-    ).ok_or_else(|| make_error_resp(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal server error",
-    ))?;
+    )
+    .ok_or_else(|| make_error_resp(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"))?;
     if tag != expected_tag {
         return Err(INVALID_AUTHZ_HEADER);
     }
