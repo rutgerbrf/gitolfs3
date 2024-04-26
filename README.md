@@ -12,6 +12,7 @@ Gitolite anymore. (It was too extensive for my use case, and I prefer to keep
 the complexity of my system down as much as possible.)
 
 Currently, it has the following features:
+
 - Storage with S3-compatible services (at the moment of writing, I am using
   Scaleway Object Storage for this purpose)
 - Git LFS Batch API support. Only the basic transfer adapter is supported. Only
@@ -24,14 +25,14 @@ Currently, it has the following features:
   to have to use something like Gitolite.)
 - Public/private repos based on the `git-daemon-export-ok` file in the bare
   repo. (I have a very particular setup in which this is desirable.)
-  - Downloads for files in public repositories are 'proxied' through the
-    Gitolfs3 server, at least when accessed from the public internet.
-  - Unauthenticated users accessing the service over a private network
-    (authorized by `X-Fowarded-Host`) can access all repositories. Downloads
-    for these users are not proxied: instead, they are directed to pre-signed
-    S3 download URLs.
-  - Authenticated users can download and upload for all repositories,
-    regardless of how they access the service.
+    - Downloads for files in public repositories are 'proxied' through the
+      Gitolfs3 server, at least when accessed from the public internet.
+    - Unauthenticated users accessing the service over a private network
+      (authorized by `X-Fowarded-Host`) can access all repositories. Downloads
+      for these users are not proxied: instead, they are directed to pre-signed
+      S3 download URLs.
+    - Authenticated users can download and upload for all repositories,
+      regardless of how they access the service.
 
 This program, as it is, solely serves my needs. Although I may occasionally add
 some features or perform some cleanups (especially the server still requires
