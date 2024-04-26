@@ -23,6 +23,10 @@ Currently, it has the following features:
   believe this was nice when wanting to push to some ssh://git@asdf/blabla.git
   repo without having to type `/srv/git` before the repo name. And I don't want
   to have to use something like Gitolite.)
+- Gitolfs3 (the server, `git-lfs-authenticate` and `git-shell` implementation)
+  do not require any kind of persistent nor temporary storage. Instead, user
+  authentication/authorization between `git-lfs-authenticate` and the Gitolfs3
+  server is done using HMAC(-SHA256) MACs.
 - Public/private repos based on the `git-daemon-export-ok` file in the bare
   repo. (I have a very particular setup in which this is desirable.)
     - Downloads for files in public repositories are 'proxied' through the
