@@ -1,0 +1,36 @@
+.TH GITOLFS3-SHELL 1 2024-04-29 Gitolfs3 "Gitolfs3 Manual"
+.SH NAME
+shell \- Gitolfs3 shell
+.SH SYNOPSIS
+.B shell
+-c <command>
+.SH DESCRIPTION
+.B shell
+is the Gitolfs3 shell.
+.SH COMMANDS
+.TP
+.B git-receive-pack \fR<repsitory>\fB
+Alternatively, using \fBgit receive-pack\fR is also allowed.
+No other arguments nor options than indicated above are processed nor allowed.
+See
+.BR git-receive-pack (1).
+.TP
+.B git-upload-archive \fR<repsitory>\fB
+Alternatively, using \fBgit upload-archive\fR is also allowed.
+No other arguments nor options than indicated above are processed nor allowed.
+See
+.BR git-upload-archive (1).
+.TP
+.B git-upload-pack \fR<repsitory>\fB
+Alternatively, using \fBgit upload-pack\fR is also allowed.
+No other arguments nor options than indicated above are processed nor allowed.
+See
+.BR git-upload-pack (1).
+.TP
+.B git-lfs-authenticate \fR<repository> upload/download\fB
+Outputs a JSON document containing a reference to the Gitolfs3 Git LFS endpoint
+for the indicated repository and an accompanying tag/MAC to authenticate with
+the Gitolfs3 server.
+Only valid for the indicated repository and operation.
+See
+.BR gitolfs3-authenticate (1).

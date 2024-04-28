@@ -1,0 +1,124 @@
+.TH GITOLFS3-SERVER 1 2024-04-29 Gitolfs3 "Gitolfs3 Manual"
+.SH NAME
+server \- Gitolfs3 Git LFS server
+.SH SYNOPSIS
+.B server
+.SH DESCRIPTION
+.B server
+is the Gitolfs3 Git LFS server. It is primarily configured using environment
+variables.
+A complete reference of the environment variables can be seen below.
+
+.B Important note:
+The working directory of the Gitolfs3 server should be the folder containing all Git repositories.
+Otherwise, repositories will not be recognized (and nothing will work).
+
+The Gitolfs3 server uses S3-compatible services as backing storage.
+In the configured S3 bucket, a familiar structure is used:
+.in +2
+lfs-test.git/ ................. repository name
+.in +2
+lfs/objects/ ................ namespace
+.in +2
+4e/ ....................... first byte of the object ID (OID)
+.in +2
+7b/ ..................... second byte of the OID
+.in +2
+4e7bfdb[...]11ce013 ... OID (SHA256)
+.in -10
+
+Public and private repositories are distinguished using the presence of a
+\fIgit-daemon-export-ok\fR file in the bare repository.
+Unauthenticated users accessing the service over the public internet are
+allowed to download all files from all public repositories.
+Unauthenticated users accessing the service over a trusted network are allowed
+to download all files from all repositories, so also from all private
+repositories.
+Only authenticated users are authorized to upload files.
+For information on access control in private networks, please see the
+documentation for the environment variable
+.BR GITOLFS3_TRUSTED_FORWARDED_HOSTS .
+
+This server can be used in combination with the Gitolfs3 Git LFS authentication
+agent (see
+.BR gitolfs3-authenticate ).
+For more information, please see the documentation for the environment variable
+.BR GITOLFS3_KEY_PATH .
+.SH ENVIRONMENT VARIABLES
+.TP
+.B GITOLFS3_S3_SECRET_ACCESS_KEY_FILE
+.B Required.
+Path to the Secret Access Key to access the configured S3 service.
+.TP
+.B GITOLFS3_S3_ACCESS_KEY_ID_FILE
+.B Required.
+Path to the Access Key ID to access the configured S3 service.
+.TP
+.B GITOLFS3_S3_REGION
+.B Required.
+The S3 region which the configured bucket is in.
+.TP
+.B GITOLFS3_S3_ENDPOINT
+.B Required.
+The S3 endpoint to use.
+Whether using Amazon S3 or another provider, this URL always be provided.
+In the case of Scaleway Object Storage, this may look like
+\fIhttps://s3.nl-ams.scw.cloud\fR for the region \fInl-ams\fR.
+.TP
+.B GITOLFS3_S3_BUCKET
+.B Required.
+The S3 bucket to use.
+Should be in the configured region (see
+.BR GITOLFS_S3_ENDPOINT ).
+.TP
+.B GITOLFS3_BASE_URL
+.B Required.
+The base URL under which the Gitolfs3 server itself runs.
+This is required so that the server can generate hyperlinks that refer to
+itself.
+.TP
+.B GITOLFS3_KEY_PATH
+.B Required.
+Path to the key that is used to generate and verify tags (MACs) for requests.
+Must correspond with the key used by
+.BR gitolfs3-authenticate (1),
+if using.
+.TP
+.B GITOLFS3_LISTEN_HOST
+.B Required.
+The host on which the Gitolfs3 server should listen.
+.TP
+.B GITOLFS3_LISTEN_PORT
+.B Required.
+The port on which the Gitolfs3 server should listen.
+.TP
+.B GITOLFS3_DOWNLOAD_LIMIT
+.B Required.
+The maximum amount of file bytes which may be downloaded within the span of an
+hour.
+
+The server keeps track of the amount of bytes downloaded in the last hour in a
+file called \fI.gitofls3-dlimit\fR, which it stores in its working directory.
+Every hour, the counter is reset.
+When the server crashes, the counter is not reset.
+This means that the implementation is pretty messy, and that repeated crashes
+of the server turn this 'hour' into practical 'infinity'.
+
+The main purpose of this feature is to prevent incurring unforeseen egress
+costs.
+
+.B Note:
+Only untrusted hosts are held to this limit.
+.TP
+.B GITOLFS3_TRUSTED_FORWARDED_HOSTS
+.B Optional.
+A comma-separated list of hosts which can be classified as 'trusted'.
+
+If a request comes in for which the X-Forwarded-Host header contains one of the
+hosts in this list, then the user is automatically generated read access to all
+repositories, regardless of the presence of a \fIgit-daemon-export-ok\fR file.
+Furthermore, presigned URLs are returned for download requests, instead of
+downloads being proxied through the Gitolfs3 server.
+
+.B Note:
+There must be no space between the comma-separated items.

@@ -1,0 +1,33 @@
+.TH GITOLFS3-AUTHENTICATE 1 2024-04-29 Gitolfs3 "Gitolfs3 Manual"
+.SH NAME
+git-lfs-authenticate \- Git LFS authentication agent for Gitolfs3
+.SH SYNOPSIS
+.B git-lfs-authenticate
+<repository>
+upload/download
+.SH DESCRIPTION
+.B git-lfs-authenticate
+is a Git LFS authentication agent for Gitolfs3.
+When accessible from the Git shell,
+.B git-lfs-authenticate
+can authorize users to access the Gitolfs3 Git LFS server.
+
+Although
+.B git-lfs-authenticate
+does assume that the user can be trusted, as they have access to the server,
+it is a good idea to restrict the shell for the \fIgit\fR user.
+For example, the user should not be able to modify environment variables, nor
+should the user be able to execute any arbitrary command.
+The Git shell provided by Gitolfs3 may be a good option. (See
+.BR gitolfs3-shell (1).)
+.SH ENVIRONMENT VARIABLES
+.TP
+.B GITOLFS3_HREF_BASE
+.B Required.
+The base URL at which the Gitolfs3 server is available.
+Must end with a slash.
+.TP
+.B GITOLFS3_KEY_PATH
+.B Required.
+The path to the key which is used to authorize the request to the Gitolfs3
+server.
