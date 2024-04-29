@@ -5,8 +5,8 @@ gitolfs3-shell \- Gitolfs3 shell
 .B gitolfs3-shell
 -c <command>
 .SH DESCRIPTION
-.B shell
-is the Gitolfs3 shell.
+.B gitolfs3-shell
+is the Gitolfs3 shell, usable as the default shell for the \fIgit\fR user.
 .SH COMMANDS
 .TP
 .B git-receive-pack \fR<repsitory>\fB
@@ -32,5 +32,6 @@ Outputs a JSON document containing a reference to the Gitolfs3 Git LFS endpoint
 for the indicated repository and an accompanying tag/MAC to authenticate with
 the Gitolfs3 server.
 Only valid for the indicated repository and operation.
+This command is rewritten to \fIgitolfs3-authenticate\fR.
 See
 .BR gitolfs3-authenticate (1).
