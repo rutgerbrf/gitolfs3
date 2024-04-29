@@ -64,14 +64,14 @@ struct Config {
 impl Config {
     fn load() -> Result<Self> {
         let Ok(href_base) = std::env::var("GITOLFS3_HREF_BASE") else {
-            bail!("configured base URL not provided");
+            bail!("invalid configuration: base URL not provided");
         };
         if !href_base.ends_with('/') {
-            bail!("configured base URL does not end with a slash");
+            bail!("invalid configuration: base URL does not end with a slash");
         }
 
         let Ok(key_path) = std::env::var("GITOLFS3_KEY_PATH") else {
-            bail!("key path not provided");
+            bail!("invalid configuration: key path not provided");
         };
         let key = load_key(&key_path).map_err(|e| anyhow!("failed to load key: {e}"))?;
 
