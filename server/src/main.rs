@@ -765,7 +765,7 @@ fn authorize_batch(
     if !verify_claims(conf, &claims, headers)? {
         return authorize_batch_unauthenticated(conf, public, operation, headers);
     }
-    return Ok(Trusted(true));
+    Ok(Trusted(true))
 }
 
 fn authorize_batch_unauthenticated(
@@ -785,10 +785,10 @@ fn authorize_batch_unauthenticated(
             if !trusted {
                 return Err(REPO_NOT_FOUND);
             }
-            return Err(make_error_resp(
+            Err(make_error_resp(
                 StatusCode::FORBIDDEN,
                 "Authentication required to upload",
-            ));
+            ))
         }
         common::Operation::Download => {
             // Again, trusted users can see all repos. For untrusted users, we first need to check
@@ -800,7 +800,7 @@ fn authorize_batch_unauthenticated(
                 }
                 return Ok(Trusted(false));
             }
-            return Ok(Trusted(true));
+            Ok(Trusted(true))
         }
     }
 }
