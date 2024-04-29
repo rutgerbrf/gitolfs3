@@ -46,10 +46,30 @@
 
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
-          gitolfs3 = craneLib.buildPackage (commonArgs // {
+          gitolfs3-bare = craneLib.buildPackage (commonArgs // {
             # We already have the gitolfs3-nextest check
             doCheck = false;
           });
+
+          gitolfs3-man = pkgs.stdenv.mkDerivation {
+            name = "gitolfs3-man";
+
+            src = ./docs/man;
+
+            installPhase = ''
+              install -D gitolfs3-authenticate.1 $out/share/man/gitolfs3-authenticate.1
+              install -D gitolfs3-server.1 $out/share/man/gitolfs3-server.1
+              install -D gitolfs3-shell.1 $out/share/man/gitolfs3-shell.1
+            '';
+          };
+
+          gitolfs3 = pkgs.buildEnv {
+            name = "gitolfs3";
+
+            paths = [ gitolfs3-bare gitolfs3-man ];
+
+            pathsToLink = [ "/bin" "/share/man" ];
+          };
         in
         {
           checks = {
