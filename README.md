@@ -1,10 +1,9 @@
-gitolfs3
+Gitolfs3: a very simple Git LFS server
 ========
 
-Gitolfs3 is a very simple Git LFS server.
-
-It needs to do one thing: provide me with a personal Git LFS server that I can
-run on my VPS. It seems to be doing an okay job at it so far.
+Gitolfs3 has a singular purpose: provide me with a personal Git LFS server that
+I can run on my VPS, that stores objects in S3. It seems to be doing an okay
+job at it so far.
 
 The name 'Gitolfs3' started as some kind of concoction of Gitolite, LFS and S3.
 These days, this project has nothing to do with Gitolite because I don't use
@@ -14,7 +13,7 @@ the complexity of my system down as much as possible.)
 Currently, it has the following features:
 
 - Storage with S3-compatible services (at the moment of writing, I am using
-  Scaleway Object Storage for this purpose)
+  Scaleway Object Storage for this purpose).
 - Git LFS Batch API support. Only the basic transfer adapter is supported. Only
   SHA256 Object IDs (OIDs) are supported.
 - `git-lfs-authenticate` is provided for authentication over SSH. File transfer
@@ -47,3 +46,11 @@ use cases than me. In case you want to use this software, feel free to, but
 expect that you will basically have to 'make it your own'. If you have a
 burning question or find a security vulnerability, feel free to email me. I'm
 sure you'll manage to find my email address somewhere.
+
+Missing features that I might implement at some point when I care enough:
+
+- No namespacing on S3. (This would mean that having the same big file in two
+  repositories would mean it is only stored on S3 once.)
+- Any kind of file deletion/garbage collection. If you ever have the need, you
+  need to do this manually right now.
+- Resuming downloads.
