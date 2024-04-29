@@ -58,15 +58,17 @@
             # We already have the gitolfs3-nextest check
             doCheck = false;
           })).overrideAttrs(old: old // {
+            nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+              pkgs.installShellFiles
+            ];
+
             postInstall = (old.postInstall or "") + ''
-              ls docs
-              ls docs/man
-              install -D docs/man/gitolfs3-authenticate.1 $man/share/man/gitolfs3-authenticate.1
-              install -D docs/man/gitolfs3-server.1 $man/share/man/gitolfs3-server.1
-              install -D docs/man/gitolfs3-shell.1 $man/share/man/gitolfs3-shell.1
+              installManPage docs/man/gitolfs3-authenticate.1
+              installManPage docs/man/gitolfs3-server.1
+              installManPage docs/man/gitolfs3-shell.1
             '';
 
-            outputs = [ "out" "man" ];
+            outputs = [ "out" ];
           });
         in
         {
