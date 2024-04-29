@@ -1,10 +1,10 @@
 {
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2311.*.tar.gz";
-    flake-utils.url = "https://flakehub.com/f/numtide/flake-utils/0.1.90.tar.gz";
+    flake-utils.url = "https://flakehub.com/f/numtide/flake-utils/0.1.92.tar.gz";
 
     crane = {
-      url = "https://flakehub.com/f/ipetkov/crane/0.16.0.tar.gz";
+      url = "https://flakehub.com/f/ipetkov/crane/0.16.3.tar.gz";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
