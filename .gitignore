@@ -3,5 +3,6 @@
 .vscode/
 # nix build
 /result
+/result-man
 # cargo build
 /target/
