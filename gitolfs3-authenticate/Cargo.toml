@@ -1,10 +1,10 @@
 [package]
-name = "git-lfs-authenticate"
+name = "gitolfs3-authenticate"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
 chrono = "0.4"
-common = { path = "../common" }
+gitolfs3-common = { path = "../gitolfs3-common" }
 serde_json = "1"

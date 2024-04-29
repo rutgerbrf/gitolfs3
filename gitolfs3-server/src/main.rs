@@ -9,6 +9,9 @@ use axum::{
 };
 use base64::prelude::*;
 use chrono::{DateTime, Utc};
+use gitolfs3_common::{
+    generate_tag, load_key, Claims, Digest, HexByte, Key, Oid, Operation, SpecificClaims,
+};
 use serde::{
     de::{self, DeserializeOwned},
     Deserialize, Serialize,
@@ -228,7 +231,7 @@ impl Config {
             Ok(s3_client) => s3_client,
             Err(e) => return Err(format!("failed to create S3 client: {e}")),
         };
-        let key = match common::load_key(&env.key_path) {
+        let key = match load_key(&env.key_path) {
             Ok(key) => key,
             Err(e) => return Err(format!("failed to load Gitolfs3 key: {e}")),
         };
@@ -286,7 +289,7 @@ impl Default for HashAlgo {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 struct BatchRequestObject {
-    oid: common::Oid,
+    oid: Oid,
     size: i64,
 }
 
@@ -301,7 +304,7 @@ fn default_transfers() -> Vec<TransferAdapter> {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 struct BatchRequest {
-    operation: common::Operation,
+    operation: Operation,
     #[serde(default = "default_transfers")]
     transfers: Vec<TransferAdapter>,
     objects: Vec<BatchRequestObject>,
@@ -426,7 +429,7 @@ struct BatchResponseObjectError {
 
 #[derive(Debug, Serialize, Clone)]
 struct BatchResponseObject {
-    oid: common::Oid,
+    oid: Oid,
     size: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     authenticated: Option<bool>,
@@ -457,11 +460,11 @@ struct BatchResponse {
     hash_algo: HashAlgo,
 }
 
-fn validate_checksum(oid: common::Oid, obj: &HeadObjectOutput) -> bool {
+fn validate_checksum(oid: Oid, obj: &HeadObjectOutput) -> bool {
     if let Some(checksum) = obj.checksum_sha256() {
         if let Ok(checksum) = BASE64_STANDARD.decode(checksum) {
             if let Ok(checksum32b) = TryInto::<[u8; 32]>::try_into(checksum) {
-                return common::Oid::from(checksum32b) == oid;
+                return Oid::from(checksum32b) == oid;
             }
         }
     }
@@ -480,7 +483,7 @@ async fn handle_upload_object(
     repo: &str,
     obj: &BatchRequestObject,
 ) -> Option<BatchResponseObject> {
-    let (oid0, oid1) = (common::HexByte(obj.oid[0]), common::HexByte(obj.oid[1]));
+    let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
     let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
 
     match state
@@ -559,7 +562,7 @@ async fn handle_download_object(
     obj: &BatchRequestObject,
     trusted: bool,
 ) -> BatchResponseObject {
-    let (oid0, oid1) = (common::HexByte(obj.oid[0]), common::HexByte(obj.oid[1]));
+    let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
     let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
 
     let result = match state
@@ -671,9 +674,9 @@ async fn handle_download_object(
         }
     }
 
-    let Some(tag) = common::generate_tag(
-        common::Claims {
-            specific_claims: common::SpecificClaims::Download(obj.oid),
+    let Some(tag) = generate_tag(
+        Claims {
+            specific_claims: SpecificClaims::Download(obj.oid),
             repo_path: repo,
             expires_at,
         },
@@ -688,8 +691,8 @@ async fn handle_download_object(
 
     let upload_path = format!(
         "{repo}/info/lfs/objects/{}/{}/{}",
-        common::HexByte(obj.oid[0]),
-        common::HexByte(obj.oid[1]),
+        HexByte(obj.oid[0]),
+        HexByte(obj.oid[1]),
         obj.oid,
     );
 
@@ -718,7 +721,7 @@ async fn handle_download_object(
 
 struct AuthorizationConfig {
     trusted_forwarded_hosts: HashSet<String>,
-    key: common::Key,
+    key: Key,
 }
 
 struct Trusted(bool);
@@ -749,7 +752,7 @@ fn authorize_batch(
     conf: &AuthorizationConfig,
     repo_path: &str,
     public: bool,
-    operation: common::Operation,
+    operation: Operation,
     headers: &HeaderMap,
 ) -> Result<Trusted, GitLfsErrorResponse<'static>> {
     // - No authentication required for downloading exported repos
@@ -759,7 +762,7 @@ fn authorize_batch(
     //   - No authentication required for downloading from any repo
 
     let claims = VerifyClaimsInput {
-        specific_claims: common::SpecificClaims::BatchApi(operation),
+        specific_claims: SpecificClaims::BatchApi(operation),
         repo_path,
     };
     if !verify_claims(conf, &claims, headers)? {
@@ -771,12 +774,12 @@ fn authorize_batch(
 fn authorize_batch_unauthenticated(
     conf: &AuthorizationConfig,
     public: bool,
-    operation: common::Operation,
+    operation: Operation,
     headers: &HeaderMap,
 ) -> Result<Trusted, GitLfsErrorResponse<'static>> {
     let trusted = forwarded_from_trusted_host(headers, &conf.trusted_forwarded_hosts)?;
     match operation {
-        common::Operation::Upload => {
+        Operation::Upload => {
             // Trusted users can clone all repositories (by virtue of accessing the server via a
             // trusted network). However, they can not push without proper authentication. Untrusted
             // users who are also not authenticated should not need to know which repositories exists.
@@ -790,7 +793,7 @@ fn authorize_batch_unauthenticated(
                 "Authentication required to upload",
             ))
         }
-        common::Operation::Download => {
+        Operation::Download => {
             // Again, trusted users can see all repos. For untrusted users, we first need to check
             // whether the repo is public before we authorize. If the user is untrusted and the
             // repo isn't public, we just act like it doesn't even exist.
@@ -869,10 +872,10 @@ async fn batch(
     };
     for obj in payload.objects {
         match payload.operation {
-            common::Operation::Download => resp
+            Operation::Download => resp
                 .objects
                 .push(handle_download_object(&state, &repo, &obj, trusted).await),
-            common::Operation::Upload => {
+            Operation::Upload => {
                 if let Some(obj_resp) = handle_upload_object(&state, &repo, &obj).await {
                     resp.objects.push(obj_resp);
                 }
@@ -885,9 +888,9 @@ async fn batch(
 #[derive(Deserialize, Copy, Clone)]
 #[serde(remote = "Self")]
 struct FileParams {
-    oid0: common::HexByte,
-    oid1: common::HexByte,
-    oid: common::Oid,
+    oid0: HexByte,
+    oid1: HexByte,
+    oid: Oid,
 }
 
 impl<'de> Deserialize<'de> for FileParams {
@@ -896,8 +899,8 @@ impl<'de> Deserialize<'de> for FileParams {
         D: serde::Deserializer<'de>,
     {
         let unchecked @ FileParams {
-            oid0: common::HexByte(oid0),
-            oid1: common::HexByte(oid1),
+            oid0: HexByte(oid0),
+            oid1: HexByte(oid1),
             oid,
         } = FileParams::deserialize(deserializer)?;
         if oid0 != oid.as_bytes()[0] {
@@ -915,7 +918,7 @@ impl<'de> Deserialize<'de> for FileParams {
 }
 
 pub struct VerifyClaimsInput<'a> {
-    pub specific_claims: common::SpecificClaims,
+    pub specific_claims: SpecificClaims,
     pub repo_path: &'a str,
 }
 
@@ -935,11 +938,11 @@ fn verify_claims(
         .strip_prefix("Gitolfs3-Hmac-Sha256 ")
         .ok_or(INVALID_AUTHZ_HEADER)?;
     let (tag, expires_at) = val.split_once(' ').ok_or(INVALID_AUTHZ_HEADER)?;
-    let tag: common::Digest<32> = tag.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
+    let tag: Digest<32> = tag.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
     let expires_at: i64 = expires_at.parse().map_err(|_| INVALID_AUTHZ_HEADER)?;
     let expires_at = DateTime::<Utc>::from_timestamp(expires_at, 0).ok_or(INVALID_AUTHZ_HEADER)?;
-    let expected_tag = common::generate_tag(
-        common::Claims {
+    let expected_tag = generate_tag(
+        Claims {
             specific_claims: claims.specific_claims,
             repo_path: claims.repo_path,
             expires_at,
@@ -957,11 +960,11 @@ fn verify_claims(
 fn authorize_get(
     conf: &AuthorizationConfig,
     repo_path: &str,
-    oid: common::Oid,
+    oid: Oid,
     headers: &HeaderMap,
 ) -> Result<(), GitLfsErrorResponse<'static>> {
     let claims = VerifyClaimsInput {
-        specific_claims: common::SpecificClaims::Download(oid),
+        specific_claims: SpecificClaims::Download(oid),
         repo_path,
     };
     if !verify_claims(conf, &claims, headers)? {
@@ -1100,7 +1103,7 @@ fn test_deserialize() {
     let json = r#"{"operation":"upload","objects":[{"oid":"8f4123f9a7181f488c5e111d82cefd992e461ae5df01fd2254399e6e670b2d3c","size":170904}],
                    "transfers":["lfs-standalone-file","basic","ssh"],"ref":{"name":"refs/heads/main"},"hash_algo":"sha256"}"#;
     let expected = BatchRequest {
-        operation: common::Operation::Upload,
+        operation: Operation::Upload,
         objects: vec![BatchRequestObject {
             oid: "8f4123f9a7181f488c5e111d82cefd992e461ae5df01fd2254399e6e670b2d3c"
                 .parse()
@@ -1123,14 +1126,14 @@ fn test_deserialize() {
 #[test]
 fn test_validate_claims() {
     let key = "00232f7a019bd34e3921ee6c5f04caf48a4489d1be5d1999038950a7054e0bfea369ce2becc0f13fd3c69f8af2384a25b7ac2d52eb52c33722f3c00c50d4c9c2";
-    let key: common::Key = key.parse().unwrap();
+    let key: Key = key.parse().unwrap();
 
-    let claims = common::Claims {
+    let claims = Claims {
         expires_at: Utc::now() + std::time::Duration::from_secs(5 * 60),
         repo_path: "lfs-test.git",
-        specific_claims: common::SpecificClaims::BatchApi(common::Operation::Download),
+        specific_claims: SpecificClaims::BatchApi(Operation::Download),
     };
-    let tag = common::generate_tag(claims, &key).unwrap();
+    let tag = generate_tag(claims, &key).unwrap();
     let header_value = format!(
         "Gitolfs3-Hmac-Sha256 {tag} {}",
         claims.expires_at.timestamp()

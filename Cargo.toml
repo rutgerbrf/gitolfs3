@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-	"common",
-	"git-lfs-authenticate",
-	"server",
-	"shell",
+	"gitolfs3-common",
+	"gitolfs3-authenticate",
+	"gitolfs3-server",
+	"gitolfs3-shell",
 ]

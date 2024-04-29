@@ -625,16 +625,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hmac-sha256",
- "serde",
- "subtle",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -887,14 +877,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
 
 [[package]]
-name = "git-lfs-authenticate"
+name = "gitolfs3-authenticate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "common",
+ "gitolfs3-common",
  "serde_json",
 ]
+
+[[package]]
+name = "gitolfs3-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hmac-sha256",
+ "serde",
+ "subtle",
+]
+
+[[package]]
+name = "gitolfs3-server"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-sdk-s3",
+ "axum",
+ "base64",
+ "chrono",
+ "gitolfs3-common",
+ "mime",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "gitolfs3-shell"
+version = "0.1.0"
 
 [[package]]
 name = "group"
@@ -1727,25 +1750,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-sdk-s3",
- "axum",
- "base64",
- "chrono",
- "common",
- "mime",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tower",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1775,10 +1779,6 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
-
-[[package]]
-name = "shell"
-version = "0.1.0"
 
 [[package]]
 name = "signal-hook-registry"

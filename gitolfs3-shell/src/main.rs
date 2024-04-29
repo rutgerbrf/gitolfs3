@@ -46,6 +46,8 @@ fn main() -> ExitCode {
         let repository = cmd[0].trim_start_matches('/');
         args.push(repository);
     } else if program == "git-lfs-authenticate" {
+        program.clear();
+        program.push_str("gitolfs3-authenticate");
         if cmd.len() != 2 {
             eprintln!("Bad command");
             return bad_usage;

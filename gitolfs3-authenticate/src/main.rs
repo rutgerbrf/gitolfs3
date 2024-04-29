@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
+use gitolfs3_common::{generate_tag, load_key, Claims, Key, Operation, SpecificClaims};
 use serde_json::json;
 use std::{process::ExitCode, time::Duration};
 
@@ -28,9 +29,9 @@ fn main() -> ExitCode {
     }
 
     let expires_at = Utc::now() + Duration::from_secs(5 * 60);
-    let Some(tag) = common::generate_tag(
-        common::Claims {
-            specific_claims: common::SpecificClaims::BatchApi(operation),
+    let Some(tag) = generate_tag(
+        Claims {
+            specific_claims: SpecificClaims::BatchApi(operation),
             repo_path: &repo_name,
             expires_at,
         },
@@ -57,7 +58,7 @@ fn main() -> ExitCode {
 
 struct Config {
     href_base: String,
-    key: common::Key,
+    key: Key,
 }
 
 impl Config {
@@ -72,15 +73,15 @@ impl Config {
         let Ok(key_path) = std::env::var("GITOLFS3_KEY_PATH") else {
             bail!("key path not provided");
         };
-        let key = common::load_key(&key_path).map_err(|e| anyhow!("failed to load key: {e}"))?;
+        let key = load_key(&key_path).map_err(|e| anyhow!("failed to load key: {e}"))?;
 
         Ok(Self { href_base, key })
     }
 }
 
-fn parse_cmdline() -> Result<(String, common::Operation)> {
+fn parse_cmdline() -> Result<(String, Operation)> {
     let [repo_path, op_str] = get_cmdline_args::<2>()?;
-    let op: common::Operation = op_str
+    let op: Operation = op_str
         .parse()
         .map_err(|e| anyhow!("unknown operation: {e}"))?;
     validate_repo_path(&repo_path).map_err(|e| anyhow!("invalid repository name: {e}"))?;
