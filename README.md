@@ -1,5 +1,7 @@
 Gitolfs3: a very simple Git LFS server
-========
+======================================
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 
 Gitolfs3 has a singular purpose: provide me with a personal Git LFS server that
 I can run on my VPS, that stores objects in S3. It seems to be doing an okay
