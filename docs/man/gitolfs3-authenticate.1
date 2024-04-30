@@ -31,3 +31,13 @@ Must end with a slash.
 .B Required.
 The path to the key which is used to authorize the request to the Gitolfs3
 server.
+The key must be 128-character hexadecimal string, i.e., a 64-byte number.
+Such a key can, for example, be generated using OpenSSL, with the following
+command:
+
+	openssl rand -hex 64
+
+Note that the Gitolfs3 server must be configured to use exactly the same key
+for
+.B gitolfs3-authenticate
+to function.

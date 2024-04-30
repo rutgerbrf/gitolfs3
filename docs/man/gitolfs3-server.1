@@ -15,18 +15,22 @@ Otherwise, repositories will not be recognized (and nothing will work).
 
 The Gitolfs3 server uses S3-compatible services as backing storage.
 In the configured S3 bucket, a familiar structure is used:
-.in +2
-lfs-test.git/ ................. repository name
-.in +2
-lfs/objects/ ................ namespace
-.in +2
-4e/ ....................... first byte of the object ID (OID)
-.in +2
-7b/ ..................... second byte of the OID
-.in +2
-4e7bfdb[...]11ce013 ... OID (SHA256)
-.in -10
+.IP
+.TS
+tab(%);
+l l
+l l
+l l
+l l
+l l.
+lfs-test.git/ % repository name
+  lfs/objects/ % namespace
+    4e/ % first byte of the object ID (OID)
+      7b/ % second byte of the OID
+        4e7bfdb[...]11ce013 % OID (SHA256)
+.TE
 
+.P
 Public and private repositories are distinguished using the presence of a
 \fIgit-daemon-export-ok\fR file in the bare repository.
 Unauthenticated users accessing the service over the public internet are
@@ -80,6 +84,12 @@ itself.
 .B GITOLFS3_KEY_PATH
 .B Required.
 Path to the key that is used to generate and verify tags (MACs) for requests.
+The key must be 128-character hexadecimal string, i.e., a 64-byte number.
+Such a key can, for example, be generated using OpenSSL, with the following
+command:
+
+	openssl rand -hex 64
+
 Must correspond with the key used by
 .BR gitolfs3-authenticate (1),
 if using.
