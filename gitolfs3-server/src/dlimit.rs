@@ -55,7 +55,7 @@ impl DownloadLimiter {
         Ok(true)
     }
 
-    pub async fn reset(&mut self) {
+    async fn reset(&mut self) {
         self.current = 0;
         if let Err(e) = self.write_new_count().await {
             println!("Failed to reset download counter: {e}");

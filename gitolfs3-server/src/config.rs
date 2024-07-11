@@ -2,66 +2,6 @@ use std::collections::HashSet;
 
 use gitolfs3_common::{load_key, Key};
 
-struct Env {
-    s3_access_key_id: String,
-    s3_secret_access_key: String,
-    s3_bucket: String,
-    s3_region: String,
-    s3_endpoint: String,
-    base_url: String,
-    key_path: String,
-    listen_host: String,
-    listen_port: String,
-    download_limit: String,
-    trusted_forwarded_hosts: String,
-}
-
-fn require_env(name: &str) -> Result<String, String> {
-    std::env::var(name)
-        .map_err(|_| format!("environment variable {name} should be defined and valid"))
-}
-
-impl Env {
-    fn load() -> Result<Env, String> {
-        Ok(Env {
-            s3_secret_access_key: require_env("GITOLFS3_S3_SECRET_ACCESS_KEY_FILE")?,
-            s3_access_key_id: require_env("GITOLFS3_S3_ACCESS_KEY_ID_FILE")?,
-            s3_region: require_env("GITOLFS3_S3_REGION")?,
-            s3_endpoint: require_env("GITOLFS3_S3_ENDPOINT")?,
-            s3_bucket: require_env("GITOLFS3_S3_BUCKET")?,
-            base_url: require_env("GITOLFS3_BASE_URL")?,
-            key_path: require_env("GITOLFS3_KEY_PATH")?,
-            listen_host: require_env("GITOLFS3_LISTEN_HOST")?,
-            listen_port: require_env("GITOLFS3_LISTEN_PORT")?,
-            download_limit: require_env("GITOLFS3_DOWNLOAD_LIMIT")?,
-            trusted_forwarded_hosts: std::env::var("GITOLFS3_TRUSTED_FORWARDED_HOSTS")
-                .unwrap_or_default(),
-        })
-    }
-}
-
-fn get_s3_client(env: &Env) -> Result<aws_sdk_s3::Client, std::io::Error> {
-    let access_key_id = std::fs::read_to_string(&env.s3_access_key_id)?;
-    let secret_access_key = std::fs::read_to_string(&env.s3_secret_access_key)?;
-
-    let credentials = aws_sdk_s3::config::Credentials::new(
-        access_key_id,
-        secret_access_key,
-        None,
-        None,
-        "gitolfs3-env",
-    );
-    let config = aws_config::SdkConfig::builder()
-        .behavior_version(aws_config::BehaviorVersion::latest())
-        .region(aws_config::Region::new(env.s3_region.clone()))
-        .endpoint_url(&env.s3_endpoint)
-        .credentials_provider(aws_sdk_s3::config::SharedCredentialsProvider::new(
-            credentials,
-        ))
-        .build();
-    Ok(aws_sdk_s3::Client::new(&config))
-}
-
 pub struct Config {
     pub listen_addr: (String, u16),
     pub base_url: String,
@@ -83,7 +23,7 @@ impl Config {
             Err(e) => return Err(format!("failed to load configuration: {e}")),
         };
 
-        let s3_client = match get_s3_client(&env) {
+        let s3_client = match create_s3_client(&env) {
             Ok(s3_client) => s3_client,
             Err(e) => return Err(format!("failed to create S3 client: {e}")),
         };
@@ -119,4 +59,64 @@ impl Config {
             download_limit,
         })
     }
+}
+
+fn create_s3_client(env: &Env) -> Result<aws_sdk_s3::Client, std::io::Error> {
+    let access_key_id = std::fs::read_to_string(&env.s3_access_key_id)?;
+    let secret_access_key = std::fs::read_to_string(&env.s3_secret_access_key)?;
+
+    let credentials = aws_sdk_s3::config::Credentials::new(
+        access_key_id,
+        secret_access_key,
+        None,
+        None,
+        "gitolfs3-env",
+    );
+    let config = aws_config::SdkConfig::builder()
+        .behavior_version(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(env.s3_region.clone()))
+        .endpoint_url(&env.s3_endpoint)
+        .credentials_provider(aws_sdk_s3::config::SharedCredentialsProvider::new(
+            credentials,
+        ))
+        .build();
+    Ok(aws_sdk_s3::Client::new(&config))
+}
+
+struct Env {
+    s3_access_key_id: String,
+    s3_secret_access_key: String,
+    s3_bucket: String,
+    s3_region: String,
+    s3_endpoint: String,
+    base_url: String,
+    key_path: String,
+    listen_host: String,
+    listen_port: String,
+    download_limit: String,
+    trusted_forwarded_hosts: String,
+}
+
+impl Env {
+    fn load() -> Result<Env, String> {
+        Ok(Env {
+            s3_secret_access_key: require_env("GITOLFS3_S3_SECRET_ACCESS_KEY_FILE")?,
+            s3_access_key_id: require_env("GITOLFS3_S3_ACCESS_KEY_ID_FILE")?,
+            s3_region: require_env("GITOLFS3_S3_REGION")?,
+            s3_endpoint: require_env("GITOLFS3_S3_ENDPOINT")?,
+            s3_bucket: require_env("GITOLFS3_S3_BUCKET")?,
+            base_url: require_env("GITOLFS3_BASE_URL")?,
+            key_path: require_env("GITOLFS3_KEY_PATH")?,
+            listen_host: require_env("GITOLFS3_LISTEN_HOST")?,
+            listen_port: require_env("GITOLFS3_LISTEN_PORT")?,
+            download_limit: require_env("GITOLFS3_DOWNLOAD_LIMIT")?,
+            trusted_forwarded_hosts: std::env::var("GITOLFS3_TRUSTED_FORWARDED_HOSTS")
+                .unwrap_or_default(),
+        })
+    }
+}
+
+fn require_env(name: &str) -> Result<String, String> {
+    std::env::var(name)
+        .map_err(|_| format!("environment variable {name} should be defined and valid"))
 }

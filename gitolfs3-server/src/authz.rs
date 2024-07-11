@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http;
 use chrono::{DateTime, Utc};
 use gitolfs3_common::{generate_tag, Claims, Digest, Oid, Operation, SpecificClaims};
 
@@ -11,31 +11,12 @@ use crate::{
 
 pub struct Trusted(pub bool);
 
-fn forwarded_from_trusted_host(
-    headers: &HeaderMap,
-    trusted: &HashSet<String>,
-) -> Result<bool, GitLfsErrorResponse<'static>> {
-    if let Some(forwarded_host) = headers.get("X-Forwarded-Host") {
-        if let Ok(forwarded_host) = forwarded_host.to_str() {
-            if trusted.contains(forwarded_host) {
-                return Ok(true);
-            }
-        } else {
-            return Err(make_error_resp(
-                StatusCode::NOT_FOUND,
-                "Invalid X-Forwarded-Host header",
-            ));
-        }
-    }
-    Ok(false)
-}
-
 pub fn authorize_batch(
     conf: &AuthorizationConfig,
     repo_path: &str,
     public: bool,
     operation: Operation,
-    headers: &HeaderMap,
+    headers: &http::HeaderMap,
 ) -> Result<Trusted, GitLfsErrorResponse<'static>> {
     // - No authentication required for downloading exported repos
     // - When authenticated:
@@ -57,7 +38,7 @@ fn authorize_batch_unauthenticated(
     conf: &AuthorizationConfig,
     public: bool,
     operation: Operation,
-    headers: &HeaderMap,
+    headers: &http::HeaderMap,
 ) -> Result<Trusted, GitLfsErrorResponse<'static>> {
     let trusted = forwarded_from_trusted_host(headers, &conf.trusted_forwarded_hosts)?;
     match operation {
@@ -71,7 +52,7 @@ fn authorize_batch_unauthenticated(
                 return Err(REPO_NOT_FOUND);
             }
             Err(make_error_resp(
-                StatusCode::FORBIDDEN,
+                http::StatusCode::FORBIDDEN,
                 "Authentication required to upload",
             ))
         }
@@ -94,7 +75,7 @@ pub fn authorize_get(
     conf: &AuthorizationConfig,
     repo_path: &str,
     oid: Oid,
-    headers: &HeaderMap,
+    headers: &http::HeaderMap,
 ) -> Result<(), GitLfsErrorResponse<'static>> {
     let claims = VerifyClaimsInput {
         specific_claims: SpecificClaims::Download(oid),
@@ -102,27 +83,48 @@ pub fn authorize_get(
     };
     if !verify_claims(conf, &claims, headers)? {
         return Err(make_error_resp(
-            StatusCode::UNAUTHORIZED,
+            http::StatusCode::UNAUTHORIZED,
             "Repository not found",
         ));
     }
     Ok(())
 }
 
-pub struct VerifyClaimsInput<'a> {
-    pub specific_claims: SpecificClaims,
-    pub repo_path: &'a str,
+fn forwarded_from_trusted_host(
+    headers: &http::HeaderMap,
+    trusted: &HashSet<String>,
+) -> Result<bool, GitLfsErrorResponse<'static>> {
+    if let Some(forwarded_host) = headers.get("X-Forwarded-Host") {
+        if let Ok(forwarded_host) = forwarded_host.to_str() {
+            if trusted.contains(forwarded_host) {
+                return Ok(true);
+            }
+        } else {
+            return Err(make_error_resp(
+                http::StatusCode::NOT_FOUND,
+                "Invalid X-Forwarded-Host header",
+            ));
+        }
+    }
+    Ok(false)
+}
+
+struct VerifyClaimsInput<'a> {
+    specific_claims: SpecificClaims,
+    repo_path: &'a str,
 }
 
 fn verify_claims(
     conf: &AuthorizationConfig,
     claims: &VerifyClaimsInput,
-    headers: &HeaderMap,
+    headers: &http::HeaderMap,
 ) -> Result<bool, GitLfsErrorResponse<'static>> {
-    const INVALID_AUTHZ_HEADER: GitLfsErrorResponse =
-        make_error_resp(StatusCode::BAD_REQUEST, "Invalid authorization header");
+    const INVALID_AUTHZ_HEADER: GitLfsErrorResponse = make_error_resp(
+        http::StatusCode::BAD_REQUEST,
+        "Invalid authorization header",
+    );
 
-    let Some(authz) = headers.get(header::AUTHORIZATION) else {
+    let Some(authz) = headers.get(http::header::AUTHORIZATION) else {
         return Ok(false);
     };
     let authz = authz.to_str().map_err(|_| INVALID_AUTHZ_HEADER)?;
@@ -141,7 +143,12 @@ fn verify_claims(
         },
         &conf.key,
     )
-    .ok_or_else(|| make_error_resp(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"))?;
+    .ok_or_else(|| {
+        make_error_resp(
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error",
+        )
+    })?;
     if tag != expected_tag {
         return Err(INVALID_AUTHZ_HEADER);
     }
@@ -175,8 +182,11 @@ fn test_validate_claims() {
         repo_path: claims.repo_path,
         specific_claims: claims.specific_claims,
     };
-    let mut headers = HeaderMap::new();
-    headers.insert(header::AUTHORIZATION, header_value.try_into().unwrap());
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::AUTHORIZATION,
+        header_value.try_into().unwrap(),
+    );
 
     assert!(verify_claims(&conf, &verification_claims, &headers).unwrap());
 }

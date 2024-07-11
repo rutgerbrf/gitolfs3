@@ -10,12 +10,13 @@ use dlimit::DownloadLimiter;
 
 use axum::{
     extract::OriginalUri,
-    http::{StatusCode, Uri},
+    http::{self, Uri},
     routing::{get, post},
     Router, ServiceExt,
 };
-use handler::AppState;
+use handler::{handle_batch, handle_obj_download, AppState};
 use std::{process::ExitCode, sync::Arc};
+use tokio::net::TcpListener;
 use tower::Layer;
 
 #[tokio::main]
@@ -39,14 +40,14 @@ async fn main() -> ExitCode {
         dl_limiter,
     });
     let app = Router::new()
-        .route("/batch", post(handler::batch))
-        .route("/:oid0/:oid1/:oid", get(handler::obj_download))
+        .route("/batch", post(handle_batch))
+        .route("/:oid0/:oid1/:oid", get(handle_obj_download))
         .with_state(shared_state);
 
     let middleware = axum::middleware::map_request(rewrite_url);
     let app_with_middleware = middleware.layer(app);
 
-    let listener = match tokio::net::TcpListener::bind(conf.listen_addr).await {
+    let listener = match TcpListener::bind(conf.listen_addr).await {
         Ok(listener) => listener,
         Err(e) => {
             println!("Failed to listen: {e}");
@@ -63,25 +64,23 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn rewrite_url<B>(
-    mut req: axum::http::Request<B>,
-) -> Result<axum::http::Request<B>, StatusCode> {
+async fn rewrite_url<B>(mut req: http::Request<B>) -> Result<http::Request<B>, http::StatusCode> {
     let uri = req.uri();
     let original_uri = OriginalUri(uri.clone());
 
     let Some(path_and_query) = uri.path_and_query() else {
         // L @ no path & query
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(http::StatusCode::BAD_REQUEST);
     };
     let Some((repo, path)) = path_and_query.path().split_once("/info/lfs/objects") else {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(http::StatusCode::NOT_FOUND);
     };
     let repo = repo
         .trim_start_matches('/')
         .trim_end_matches('/')
         .to_string();
     if !path.starts_with('/') || !repo.ends_with(".git") {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(http::StatusCode::NOT_FOUND);
     }
 
     let mut parts = uri.clone().into_parts();
@@ -90,7 +89,7 @@ async fn rewrite_url<B>(
         Some(q) => format!("{path}?{q}").try_into().ok(),
     };
     let Ok(new_uri) = Uri::from_parts(parts) else {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        return Err(http::StatusCode::INTERNAL_SERVER_ERROR);
     };
 
     *req.uri_mut() = new_uri;

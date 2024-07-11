@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use axum::{
     async_trait,
     extract::{rejection, FromRequest, FromRequestParts, Request},
-    http::{header, request::Parts, HeaderValue, StatusCode},
+    http,
     response::{IntoResponse, Response},
     Extension, Json,
 };
@@ -11,79 +11,21 @@ use chrono::{DateTime, Utc};
 use gitolfs3_common::{Oid, Operation};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+// ----------------------- Generic facilities ----------------------
+
+pub type GitLfsErrorResponse<'a> = (http::StatusCode, GitLfsJson<GitLfsErrorData<'a>>);
+
+#[derive(Debug, Serialize)]
+pub struct GitLfsErrorData<'a> {
+    pub message: &'a str,
+}
+
+pub const fn make_error_resp(code: http::StatusCode, message: &str) -> GitLfsErrorResponse {
+    (code, GitLfsJson(Json(GitLfsErrorData { message })))
+}
+
 pub const REPO_NOT_FOUND: GitLfsErrorResponse =
-    make_error_resp(StatusCode::NOT_FOUND, "Repository not found");
-
-#[derive(Clone)]
-pub struct RepositoryName(pub String);
-
-pub struct RepositoryNameRejection;
-
-impl IntoResponse for RepositoryNameRejection {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Missing repository name").into_response()
-    }
-}
-
-#[async_trait]
-impl<S: Send + Sync> FromRequestParts<S> for RepositoryName {
-    type Rejection = RepositoryNameRejection;
-
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Ok(Extension(repo_name)) = Extension::<Self>::from_request_parts(parts, state).await
-        else {
-            return Err(RepositoryNameRejection);
-        };
-        Ok(repo_name)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
-pub enum TransferAdapter {
-    #[serde(rename = "basic")]
-    Basic,
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
-pub enum HashAlgo {
-    #[serde(rename = "sha256")]
-    Sha256,
-    #[serde(other)]
-    Unknown,
-}
-
-impl Default for HashAlgo {
-    fn default() -> Self {
-        Self::Sha256
-    }
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct BatchRequestObject {
-    pub oid: Oid,
-    pub size: i64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct BatchRef {
-    name: String,
-}
-
-fn default_transfers() -> Vec<TransferAdapter> {
-    vec![TransferAdapter::Basic]
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct BatchRequest {
-    pub operation: Operation,
-    #[serde(default = "default_transfers")]
-    pub transfers: Vec<TransferAdapter>,
-    pub objects: Vec<BatchRequestObject>,
-    #[serde(default)]
-    pub hash_algo: HashAlgo,
-}
+    make_error_resp(http::StatusCode::NOT_FOUND, "Repository not found");
 
 #[derive(Debug, Clone)]
 pub struct GitLfsJson<T>(pub Json<T>);
@@ -100,7 +42,7 @@ impl IntoResponse for GitLfsJsonRejection {
         match self {
             Self::Json(rej) => rej.into_response(),
             Self::MissingGitLfsJsonContentType => make_error_resp(
-                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                http::StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 &format!("Expected request with `Content-Type: {LFS_MIME}`"),
             )
             .into_response(),
@@ -125,7 +67,7 @@ pub fn is_git_lfs_json_mimetype(mimetype: &str) -> bool {
 }
 
 fn has_git_lfs_json_content_type(req: &Request) -> bool {
-    let Some(content_type) = req.headers().get(header::CONTENT_TYPE) else {
+    let Some(content_type) = req.headers().get(http::header::CONTENT_TYPE) else {
         return false;
     };
     let Ok(content_type) = content_type.to_str() else {
@@ -158,22 +100,134 @@ impl<T: Serialize> IntoResponse for GitLfsJson<T> {
         let GitLfsJson(json) = self;
         let mut resp = json.into_response();
         resp.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/vnd.git-lfs+json; charset=utf-8"),
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/vnd.git-lfs+json; charset=utf-8"),
         );
         resp
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct GitLfsErrorData<'a> {
-    pub message: &'a str,
+#[derive(Clone)]
+pub struct RepositoryName(pub String);
+
+pub struct RepositoryNameRejection;
+
+impl IntoResponse for RepositoryNameRejection {
+    fn into_response(self) -> Response {
+        (
+            http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Missing repository name",
+        )
+            .into_response()
+    }
 }
 
-pub type GitLfsErrorResponse<'a> = (StatusCode, GitLfsJson<GitLfsErrorData<'a>>);
+#[async_trait]
+impl<S: Send + Sync> FromRequestParts<S> for RepositoryName {
+    type Rejection = RepositoryNameRejection;
 
-pub const fn make_error_resp(code: StatusCode, message: &str) -> GitLfsErrorResponse {
-    (code, GitLfsJson(Json(GitLfsErrorData { message })))
+    async fn from_request_parts(
+        parts: &mut http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let Ok(Extension(repo_name)) = Extension::<Self>::from_request_parts(parts, state).await
+        else {
+            return Err(RepositoryNameRejection);
+        };
+        Ok(repo_name)
+    }
+}
+
+// ----------------------- Git LFS Batch API -----------------------
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct BatchRequest {
+    pub operation: Operation,
+    #[serde(default = "default_transfers")]
+    pub transfers: Vec<TransferAdapter>,
+    pub objects: Vec<BatchRequestObject>,
+    #[serde(default)]
+    pub hash_algo: HashAlgo,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct BatchRequestObject {
+    pub oid: Oid,
+    pub size: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+pub enum TransferAdapter {
+    #[serde(rename = "basic")]
+    Basic,
+    #[serde(other)]
+    Unknown,
+}
+
+fn default_transfers() -> Vec<TransferAdapter> {
+    vec![TransferAdapter::Basic]
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+pub enum HashAlgo {
+    #[serde(rename = "sha256")]
+    Sha256,
+    #[serde(other)]
+    Unknown,
+}
+
+impl Default for HashAlgo {
+    fn default() -> Self {
+        Self::Sha256
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct BatchRef {
+    name: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct BatchResponse {
+    pub transfer: TransferAdapter,
+    pub objects: Vec<BatchResponseObject>,
+    pub hash_algo: HashAlgo,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct BatchResponseObject {
+    pub oid: Oid,
+    pub size: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authenticated: Option<bool>,
+    pub actions: BatchResponseObjectActions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<BatchResponseObjectError>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchResponseObjectError {
+    pub code: u16,
+    pub message: String,
+}
+
+impl BatchResponseObject {
+    pub fn error(
+        obj: &BatchRequestObject,
+        code: http::StatusCode,
+        message: String,
+    ) -> BatchResponseObject {
+        BatchResponseObject {
+            oid: obj.oid,
+            size: obj.size,
+            authenticated: None,
+            actions: Default::default(),
+            error: Some(BatchResponseObjectError {
+                code: code.as_u16(),
+                message,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -192,49 +246,6 @@ pub struct BatchResponseObjectActions {
     pub download: Option<BatchResponseObjectAction>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify: Option<BatchResponseObjectAction>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct BatchResponseObjectError {
-    pub code: u16,
-    pub message: String,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct BatchResponseObject {
-    pub oid: Oid,
-    pub size: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authenticated: Option<bool>,
-    pub actions: BatchResponseObjectActions,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<BatchResponseObjectError>,
-}
-
-impl BatchResponseObject {
-    pub fn error(
-        obj: &BatchRequestObject,
-        code: StatusCode,
-        message: String,
-    ) -> BatchResponseObject {
-        BatchResponseObject {
-            oid: obj.oid,
-            size: obj.size,
-            authenticated: None,
-            actions: Default::default(),
-            error: Some(BatchResponseObjectError {
-                code: code.as_u16(),
-                message,
-            }),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct BatchResponse {
-    pub transfer: TransferAdapter,
-    pub objects: Vec<BatchResponseObject>,
-    pub hash_algo: HashAlgo,
 }
 
 #[test]
