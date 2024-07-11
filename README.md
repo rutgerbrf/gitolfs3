@@ -49,7 +49,8 @@ expect that you will basically have to 'make it your own'. If you have a
 burning question or find a security vulnerability, feel free to email me. I'm
 sure you'll manage to find my email address somewhere.
 
-Missing features that I might implement at some point when I care enough:
+Nice-to-have features that I may implement at some point, when I feel a need
+to:
 
 - No namespacing on S3. (This would mean that having the same big file in two
   repositories would mean it is only stored on S3 once.)
