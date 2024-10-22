@@ -23,13 +23,12 @@ l l
 l l
 l l
 l l.
-lfs-test.git/ % repository name
-  lfs/objects/ % namespace
-    4e/ % first byte of the object ID (OID)
-      7b/ % second byte of the OID
-        4e7bfdb[...]11ce013 % OID (SHA256)
+lfs-test.git/               % repository name                   
+  lfs/objects/              % namespace                         
+    4e/                     % first byte of the object ID (OID) 
+      7b/                   % second byte of the OID            
+        4e7bfdb[...]11ce013 % OID (SHA256)                      
 .TE
-
 .P
 Public and private repositories are distinguished using the presence of a
 \fIgit-daemon-export-ok\fR file in the bare repository.
@@ -125,7 +124,7 @@ Only untrusted hosts are held to this limit.
 A comma-separated list of hosts which can be classified as 'trusted'.
 
 If a request comes in for which the X-Forwarded-Host header contains one of the
-hosts in this list, then the user is automatically generated read access to all
+hosts in this list, then the user is automatically granted read access to all
 repositories, regardless of the presence of a \fIgit-daemon-export-ok\fR file.
 Furthermore, presigned URLs are returned for download requests, instead of
 downloads being proxied through the Gitolfs3 server.
