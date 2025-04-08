@@ -9,12 +9,12 @@ use config::Config;
 use dlimit::DownloadLimiter;
 
 use axum::{
+    Router, ServiceExt,
     extract::OriginalUri,
     http::{self, Uri},
     routing::{get, post},
-    Router, ServiceExt,
 };
-use handler::{handle_batch, handle_obj_download, AppState};
+use handler::{AppState, handle_batch, handle_obj_download};
 use std::{process::ExitCode, sync::Arc};
 use tokio::net::TcpListener;
 use tower::Layer;

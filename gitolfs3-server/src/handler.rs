@@ -2,24 +2,24 @@ use std::{collections::HashMap, sync::Arc};
 
 use aws_sdk_s3::{error::SdkError, operation::head_object::HeadObjectOutput};
 use axum::{
+    Json,
     extract::{Path, State},
     http,
     response::{IntoResponse, Response},
-    Json,
 };
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use chrono::Utc;
-use gitolfs3_common::{generate_tag, Claims, HexByte, Oid, Operation, SpecificClaims};
-use serde::{de, Deserialize};
+use gitolfs3_common::{Claims, HexByte, Oid, Operation, SpecificClaims, generate_tag};
+use serde::{Deserialize, de};
 use tokio::sync::Mutex;
 
 use crate::{
     api::{
-        is_git_lfs_json_mimetype, make_error_resp, BatchRequest, BatchRequestObject, BatchResponse,
-        BatchResponseObject, BatchResponseObjectAction, BatchResponseObjectActions, GitLfsJson,
-        HashAlgo, RepositoryName, TransferAdapter, LFS_MIME, REPO_NOT_FOUND,
+        BatchRequest, BatchRequestObject, BatchResponse, BatchResponseObject,
+        BatchResponseObjectAction, BatchResponseObjectActions, GitLfsJson, HashAlgo, LFS_MIME,
+        REPO_NOT_FOUND, RepositoryName, TransferAdapter, is_git_lfs_json_mimetype, make_error_resp,
     },
-    authz::{authorize_batch, authorize_get, Trusted},
+    authz::{Trusted, authorize_batch, authorize_get},
     config::AuthorizationConfig,
     dlimit::DownloadLimiter,
 };

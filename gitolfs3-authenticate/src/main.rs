@@ -1,6 +1,6 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
-use gitolfs3_common::{generate_tag, load_key, Claims, Key, Operation, SpecificClaims};
+use gitolfs3_common::{Claims, Key, Operation, SpecificClaims, generate_tag, load_key};
 use serde_json::json;
 use std::{process::ExitCode, time::Duration};
 

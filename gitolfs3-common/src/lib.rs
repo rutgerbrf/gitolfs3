@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use std::{
     fmt::{self, Write},
     ops,
@@ -163,13 +163,13 @@ impl fmt::Display for ReadHexError {
 }
 
 fn parse_hex_exact(value: &str, buf: &mut [u8]) -> Result<(), ParseHexError> {
-    if value.bytes().len() % 2 == 1 {
+    if value.len() % 2 == 1 {
         return Err(ParseHexError::UnevenNibbles);
     }
-    if value.bytes().len() < 2 * buf.len() {
+    if value.len() < 2 * buf.len() {
         return Err(ParseHexError::TooShort);
     }
-    if value.bytes().len() > 2 * buf.len() {
+    if value.len() > 2 * buf.len() {
         return Err(ParseHexError::TooLong);
     }
     for (i, c) in value.bytes().enumerate() {

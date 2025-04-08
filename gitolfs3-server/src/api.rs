@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
 use axum::{
-    async_trait,
-    extract::{rejection, FromRequest, FromRequestParts, Request},
+    Extension, Json,
+    extract::{FromRequest, FromRequestParts, Request, rejection},
     http,
     response::{IntoResponse, Response},
-    Extension, Json,
 };
 use chrono::{DateTime, Utc};
 use gitolfs3_common::{Oid, Operation};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 // ----------------------- Generic facilities ----------------------
 
@@ -76,7 +75,6 @@ fn has_git_lfs_json_content_type(req: &Request) -> bool {
     is_git_lfs_json_mimetype(content_type)
 }
 
-#[async_trait]
 impl<T, S> FromRequest<S> for GitLfsJson<T>
 where
     T: DeserializeOwned,
@@ -122,7 +120,6 @@ impl IntoResponse for RepositoryNameRejection {
     }
 }
 
-#[async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for RepositoryName {
     type Rejection = RepositoryNameRejection;
 

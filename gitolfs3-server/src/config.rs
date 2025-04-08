@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use gitolfs3_common::{load_key, Key};
+use gitolfs3_common::{Key, load_key};
 
 pub struct Config {
     pub listen_addr: (String, u16),

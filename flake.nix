@@ -1,9 +1,9 @@
 {
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2405.*.tar.gz";
+    nixpkgs.url = "nixpkgs/nixos-24.11";
 
-    crane.url = "https://flakehub.com/f/ipetkov/crane/0.19.1.tar.gz";
-    flake-utils.url = "https://flakehub.com/f/numtide/flake-utils/0.1.101.tar.gz";
+    crane.url = "github:ipetkov/crane";
+    flake-utils.url = "github:numtide/flake-utils";
 
     advisory-db = {
       url = "github:rustsec/advisory-db";
@@ -12,10 +12,7 @@
 
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
