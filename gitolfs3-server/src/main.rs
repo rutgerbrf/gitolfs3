@@ -41,7 +41,7 @@ async fn main() -> ExitCode {
     });
     let app = Router::new()
         .route("/batch", post(handle_batch))
-        .route("/:oid0/:oid1/:oid", get(handle_obj_download))
+        .route("/{oid0}/{oid1}/{oid}", get(handle_obj_download))
         .with_state(shared_state);
 
     let middleware = axum::middleware::map_request(rewrite_url);
