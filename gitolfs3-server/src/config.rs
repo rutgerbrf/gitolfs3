@@ -18,19 +18,11 @@ pub struct AuthorizationConfig {
 
 impl Config {
     pub fn load() -> Result<Self, String> {
-        let env = match Env::load() {
-            Ok(env) => env,
-            Err(e) => return Err(format!("failed to load configuration: {e}")),
-        };
-
-        let s3_client = match create_s3_client(&env) {
-            Ok(s3_client) => s3_client,
-            Err(e) => return Err(format!("failed to create S3 client: {e}")),
-        };
-        let key = match load_key(&env.key_path) {
-            Ok(key) => key,
-            Err(e) => return Err(format!("failed to load Gitolfs3 key: {e}")),
-        };
+        let env = Env::load().map_err(|e| format!("failed to load configuration: {e}"))?;
+        let s3_client =
+            create_s3_client(&env).map_err(|e| format!("failed to create S3 client: {e}"))?;
+        let key =
+            load_key(&env.key_path).map_err(|e| format!("failed to load Gitolfs3 key: {e}"))?;
 
         let trusted_forwarded_hosts: HashSet<String> = env
             .trusted_forwarded_hosts
