@@ -128,7 +128,7 @@ impl fmt::Display for HexByte {
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ParseHexError {
-    UnevenNibbles,
+    OddNibbleAmount,
     InvalidCharacter,
     TooShort,
     TooLong,
@@ -137,8 +137,8 @@ pub enum ParseHexError {
 impl fmt::Display for ParseHexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnevenNibbles => {
-                write!(f, "uneven amount of nibbles (chars in range [a-zA-Z0-9])")
+            Self::OddNibbleAmount => {
+                write!(f, "odd amount of nibbles (chars in range [a-zA-Z0-9])")
             }
             Self::InvalidCharacter => write!(f, "non-hex character encountered"),
             Self::TooShort => write!(f, "unexpected end of hex sequence"),
@@ -164,7 +164,7 @@ impl fmt::Display for ReadHexError {
 
 fn parse_hex_exact(value: &str, buf: &mut [u8]) -> Result<(), ParseHexError> {
     if value.len() % 2 == 1 {
-        return Err(ParseHexError::UnevenNibbles);
+        return Err(ParseHexError::OddNibbleAmount);
     }
     if value.len() < 2 * buf.len() {
         return Err(ParseHexError::TooShort);
