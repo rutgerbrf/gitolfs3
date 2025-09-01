@@ -144,31 +144,31 @@ async fn handle_download_object(
         };
     }
 
-    if let Some(content_length) = content_length {
-        if content_length > 0 {
-            match state
-                .dl_limiter
-                .lock()
-                .await
-                .request(content_length as u64)
-                .await
-            {
-                Ok(true) => {}
-                Ok(false) => {
-                    return BatchResponseObject::error(
-                        obj,
-                        http::StatusCode::SERVICE_UNAVAILABLE,
-                        "Public LFS downloads temporarily unavailable".to_string(),
-                    );
-                }
-                Err(e) => {
-                    println!("Failed to request {content_length} bytes from download limiter: {e}");
-                    return BatchResponseObject::error(
-                        obj,
-                        http::StatusCode::INTERNAL_SERVER_ERROR,
-                        "Internal server error".to_string(),
-                    );
-                }
+    if let Some(content_length) = content_length
+        && content_length > 0
+    {
+        match state
+            .dl_limiter
+            .lock()
+            .await
+            .request(content_length as u64)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => {
+                return BatchResponseObject::error(
+                    obj,
+                    http::StatusCode::SERVICE_UNAVAILABLE,
+                    "Public LFS downloads temporarily unavailable".to_string(),
+                );
+            }
+            Err(e) => {
+                println!("Failed to request {content_length} bytes from download limiter: {e}");
+                return BatchResponseObject::error(
+                    obj,
+                    http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                );
             }
         }
     }
@@ -433,12 +433,11 @@ fn s3_encode_checksum(oid: Oid) -> String {
 }
 
 fn s3_validate_checksum(oid: Oid, obj: &HeadObjectOutput) -> bool {
-    if let Some(checksum) = obj.checksum_sha256() {
-        if let Ok(checksum) = BASE64_STANDARD.decode(checksum) {
-            if let Ok(checksum32b) = TryInto::<[u8; 32]>::try_into(checksum) {
-                return Oid::from(checksum32b) == oid;
-            }
-        }
+    if let Some(checksum) = obj.checksum_sha256()
+        && let Ok(checksum) = BASE64_STANDARD.decode(checksum)
+        && let Ok(checksum32b) = TryInto::<[u8; 32]>::try_into(checksum)
+    {
+        return Oid::from(checksum32b) == oid;
     }
     true
 }

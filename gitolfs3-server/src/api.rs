@@ -19,7 +19,10 @@ pub struct GitLfsErrorData<'a> {
     pub message: &'a str,
 }
 
-pub const fn make_error_resp(code: http::StatusCode, message: &str) -> GitLfsErrorResponse {
+pub const fn make_error_resp<'a>(
+    code: http::StatusCode,
+    message: &'a str,
+) -> GitLfsErrorResponse<'a> {
     (code, GitLfsJson(Json(GitLfsErrorData { message })))
 }
 
