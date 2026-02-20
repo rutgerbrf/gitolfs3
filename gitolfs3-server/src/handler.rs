@@ -42,7 +42,7 @@ enum ObjectStatus {
 impl AppState {
     async fn check_object(&self, repo: &str, obj: &BatchRequestObject) -> Result<ObjectStatus, ()> {
         let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
-        let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
+        let full_path = format!("{repo}/lfs/objects/{oid0}/{oid1}/{}", obj.oid);
 
         let result = match self
             .s3_client
@@ -56,6 +56,14 @@ impl AppState {
             Ok(result) => result,
             Err(SdkError::ServiceError(e)) if e.err().is_not_found() => {
                 return Ok(ObjectStatus::DoesNotExist);
+            }
+            Err(SdkError::ServiceError(e)) => {
+                println!(
+                    "Failed to HeadObject (repo {repo}, OID {}): {}",
+                    e.err(),
+                    obj.oid
+                );
+                return Err(());
             }
             Err(e) => {
                 println!("Failed to HeadObject (repo {repo}, OID {}): {e}", obj.oid);
@@ -270,6 +278,14 @@ pub async fn handle_obj_download(
         .await
     {
         Ok(result) => result,
+        Err(SdkError::ServiceError(e)) => {
+            println!("Failed to GetObject (repo {repo}, OID {oid}): {}", e.err());
+            return (
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to query object information",
+            )
+                .into_response();
+        },
         Err(e) => {
             println!("Failed to GetObject (repo {repo}, OID {oid}): {e}");
             return (
