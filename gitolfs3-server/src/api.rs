@@ -168,18 +168,13 @@ fn default_transfers() -> Vec<TransferAdapter> {
     vec![TransferAdapter::Basic]
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
 pub enum HashAlgo {
+    #[default]
     #[serde(rename = "sha256")]
     Sha256,
     #[serde(other)]
     Unknown,
-}
-
-impl Default for HashAlgo {
-    fn default() -> Self {
-        Self::Sha256
-    }
 }
 
 #[derive(Debug, Serialize, Clone)]

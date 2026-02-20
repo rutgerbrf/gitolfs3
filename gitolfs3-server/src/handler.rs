@@ -88,7 +88,7 @@ async fn handle_download_object(
     trusted: bool,
 ) -> BatchResponseObject {
     let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
-    let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
+    let full_path = format!("{repo}/lfs/objects/{oid0}/{oid1}/{}", obj.oid);
 
     let content_length = match state.check_object(repo, obj).await {
         Ok(ObjectStatus::ExistsOk { content_length }) => content_length,
@@ -267,7 +267,7 @@ pub async fn handle_obj_download(
         return e.into_response();
     }
 
-    let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, oid);
+    let full_path = format!("{repo}/lfs/objects/{oid0}/{oid1}/{oid}");
     let result = match state
         .s3_client
         .get_object()
@@ -285,7 +285,7 @@ pub async fn handle_obj_download(
                 "Failed to query object information",
             )
                 .into_response();
-        },
+        }
         Err(e) => {
             println!("Failed to GetObject (repo {repo}, OID {oid}): {e}");
             return (
@@ -324,7 +324,7 @@ async fn handle_upload_object(
     obj: &BatchRequestObject,
 ) -> Option<BatchResponseObject> {
     let (oid0, oid1) = (HexByte(obj.oid[0]), HexByte(obj.oid[1]));
-    let full_path = format!("{repo}/lfs/objects/{}/{}/{}", oid0, oid1, obj.oid);
+    let full_path = format!("{repo}/lfs/objects/{oid0}/{oid1}/{}", obj.oid);
 
     match state.check_object(repo, obj).await {
         Ok(ObjectStatus::ExistsOk { .. }) => {

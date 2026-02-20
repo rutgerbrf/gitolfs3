@@ -49,9 +49,9 @@ fn main() -> ExitCode {
             ),
         },
         "expires_at": expires_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
-        "href": format!("{}{}/info/lfs", config.href_base, repo_name),
+        "href": format!("{}{repo_name}/info/lfs", config.href_base),
     });
-    println!("{}", response);
+    println!("{response}");
 
     ExitCode::SUCCESS
 }
