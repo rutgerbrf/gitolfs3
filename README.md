@@ -3,12 +3,12 @@ Gitolfs3: a very simple Git LFS server
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 
-Gitolfs3 is my personal Git LFS server that runs on my VPS. It uses a
-S3-compatible service as backing storage. It seems to be working fine up until
-now, but doesn't get too much use (so the primary reason for breakage is me
-being too lazy to refresh credentials).
+Gitolfs3 is the Git LFS server that runs on my VPS. It uses an S3-compatible
+service as backing storage. It seems to be working fine up until now, but
+doesn't get too much use (so the primary reason for breakage is me being too
+lazy to refresh credentials).
 
-The name 'Gitolfs3' started as a portmanteau of Gitolite, LFS and S3. These
+The name 'Gitolfs3' started as a portmanteau of Gitolite, Git LFS and S3. These
 days, this project has nothing to do with Gitolite, because I don't use
 Gitolite anymore. (It was too extensive for my use case, and I prefer to keep
 the complexity of my system down as much as possible.)
