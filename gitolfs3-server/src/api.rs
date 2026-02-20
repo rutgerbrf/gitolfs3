@@ -182,11 +182,6 @@ impl Default for HashAlgo {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct BatchRef {
-    name: String,
-}
-
 #[derive(Debug, Serialize, Clone)]
 pub struct BatchResponse {
     pub transfer: TransferAdapter,
